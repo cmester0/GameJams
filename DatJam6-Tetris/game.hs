@@ -10,6 +10,7 @@ import Control.Concurrent
 import Foreign.C.Types
 
 import System.Random
+import Numeric.Matrix hiding (map) -- bed and breakfeast
 
 xStepSize = 40
 yStepSize = 40
@@ -34,18 +35,19 @@ instance Random Piece where
 
 data Rotation = RStandard | RLeft | RRight | RInverted
                         
-type InnerState = (Bool , V2 CInt, [[Bool]], Int, Int, Piece, Rotation)
+type InnerState = (Bool , Bool , V2 CInt, [[Bool]], Int, Int, Piece, Rotation)
 type GameState = State InnerState InnerState
 
 tupleToRectangle (x,y,w,h) = Rectangle (P (V2 x y)) (V2 w h)
 
 initState :: InnerState
 initState = (False ,
+             False ,
              V2 4 0,
              [0 .. 21] >>= \y -> [([0 .. 9] >>= \x -> [False])],
-             100,
-             100,
-             L, -- O
+             200,
+             200,
+             L,
              RStandard)
 
 posToSquare :: V2 CInt -> Rectangle CInt
@@ -442,12 +444,16 @@ clearTetrisAtBoard board points y =
   then clearTetrisAtBoard ([([0 .. 10] >>= \x -> [False])] ++ take y board ++ drop (y+1) board) (points + 10) (y + 1)
   else clearTetrisAtBoard (board) (points + 10) (y + 1)
 
+handleAI p board downTimer piece rotation =
+  (p + V2 0 1 , rotation) -- TODO
+
 appLoop :: Renderer -> GameState -> IO ()
 appLoop renderer state =
   pollEvents >>= \events ->
   (randomIO :: IO Piece) >>= \ pieceR -> 
   let state' = foldr handleEvent state events in
-  let (gameOver , p , board, downTimerMax, downTimer, piece, rotation) = evalState state' initState in
+  let (b , gameOver , pin , board, downTimerMax, downTimer, piece, rotationin) = evalState state' initState in
+  let (p , rotation) = handleAI pin board downTimer piece rotationin in
   let (p' , dtm , dt) = 
         if downTimer == 0
         then (p + V2 0 1 , downTimerMax , downTimerMax)
@@ -465,7 +471,7 @@ appLoop renderer state =
           else (p' , board, piece, rotation, 0)
   in
   let gameOver' = gameOver || foldr (||) False (board' !! 0 ++ board' !! 1) in
-  let state' = (gameOver' , p'' , board' , dtm , dt, piece', rotation')
+  let state' = (b , gameOver' , p'' , board' , dtm , dt, piece', rotation')
   in
   let boardState = ([0 .. 9] >>= \x -> [0 .. 21] >>= \y ->
                        if ((board !! y) !! x)
@@ -495,59 +501,60 @@ appLoop renderer state =
   
       -- Present
       present renderer
-      threadDelay 1000
-      (if gameOver
+      threadDelay 200000
+      (if b
        then putStrLn "Exit"
-       else appLoop renderer (return state'))
+       else
+         if gameOver
+         then appLoop renderer (return initState)
+         else appLoop renderer (return state'))
   
 handleEvent :: Event -> GameState -> GameState
 
 handleEvent (Event e QuitEvent) s =
-  s >>= \(b,p,board,dtm,dt,piece, rotation) -> return (True,p,board,dtm,dt,piece, rotation)
+  s >>= \(b,gameOver,p,board,dtm,dt,piece, rotation) -> return (True,gameOver,p,board,dtm,dt,piece, rotation)
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Pressed _ (Keysym ScancodeEscape _ _)))) s =
-  s >>= \(b,p,board,dtm,dt,piece, rotation) -> return (True,p,board,dtm,dt,piece, rotation)
+  s >>= \(b,gameOver,p,board,dtm,dt,piece, rotation) -> return (True,gameOver,p,board,dtm,dt,piece, rotation)
 
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Pressed False (Keysym ScancodeLeft _ _)))) s =
-  s >>= \(b,(V2 x y),board,dtm,dt,piece, rotation) ->
-  return (b, if checkFigureOnBoard board (fromInteger (toInteger x) - 1) (fromInteger (toInteger y)) piece rotation
+  s >>= \(b,gameOver,(V2 x y),board,dtm,dt,piece, rotation) ->
+  return (b,gameOver, if checkFigureOnBoard board (fromInteger (toInteger x) - 1) (fromInteger (toInteger y)) piece rotation
              then (V2 x y)
              else (V2 x y) + V2 (-1) 0
          , board,dtm,dt,piece, rotation)
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Pressed False (Keysym ScancodeUp _ _)))) s =
-  s >>= \(b,(V2 x y),board,dtm,dt,piece, rotation) ->
+  s >>= \(b,gameOver,(V2 x y),board,dtm,dt,piece, rotation) ->
   let rotation' = case rotation of
                     RStandard -> RLeft
                     RLeft -> RInverted
                     RInverted -> RRight
                     RRight -> RStandard
   in
-  return (b,(V2 x y),board,dtm,dt,piece,if checkFigureOnBoard board (fromInteger (toInteger x)) (fromInteger (toInteger y)) piece rotation'
+  return (b,gameOver,(V2 x y),board,dtm,dt,piece,if checkFigureOnBoard board (fromInteger (toInteger x)) (fromInteger (toInteger y)) piece rotation'
                                         then rotation
                                         else rotation')
 
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Pressed False (Keysym ScancodeRight _ _)))) s =
-  s >>= \(b,(V2 x y),board,dtm,dt,piece, rotation) ->
-  return (b, if checkFigureOnBoard board (fromInteger (toInteger x) + 1) (fromInteger (toInteger y)) piece rotation
+  s >>= \(b,gameOver,(V2 x y),board,dtm,dt,piece, rotation) ->
+  return (b,gameOver, if checkFigureOnBoard board (fromInteger (toInteger x) + 1) (fromInteger (toInteger y)) piece rotation
              then (V2 x y)
              else (V2 x y) + V2 1 0
          , board,dtm,dt,piece, rotation)
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Pressed False (Keysym ScancodeDown _ _)))) s =
-  s >>= \(b,p,board,dtm,dt,piece, rotation) ->
-  return (b,p,board,dtm,0,piece, rotation)
-
+  s >>= \(b,gameOver,p,board,dtm,dt,piece, rotation) -> return (b,gameOver,p,board,dtm,0,piece, rotation)
 
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Released False (Keysym ScancodeLeft _ _)))) s =
-  s >>= \(b,p,board,dtm,dt,piece, rotation) -> return (b,p,board,dtm,dt,piece, rotation)
+  s >>= \(b,gameOver,p,board,dtm,dt,piece, rotation) -> return (b,gameOver,p,board,dtm,dt,piece, rotation)
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Released False (Keysym ScancodeUp _ _)))) s =
-  s >>= \(b,p,board,dtm,dt,piece, rotation) -> return (b,p,board,dtm,dt,piece, rotation)
+  s >>= \(b,gameOver,p,board,dtm,dt,piece, rotation) -> return (b,gameOver,p,board,dtm,dt,piece, rotation)
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Released False (Keysym ScancodeRight _ _)))) s =
-  s >>= \(b,p,board,dtm,dt,piece, rotation) -> return (b,p,board,dtm,dt,piece, rotation)
+  s >>= \(b,gameOver,p,board,dtm,dt,piece, rotation) -> return (b,gameOver,p,board,dtm,dt,piece, rotation)
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Released False (Keysym ScancodeDown _ _)))) s =
-  s >>= \(b,p,board,dtm,dt,piece, rotation) -> return (b,p,board,dtm,dt,piece, rotation)
+  s >>= \(b,gameOver,p,board,dtm,dt,piece, rotation) -> return (b,gameOver,p,board,dtm,dt,piece, rotation)
 
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Pressed False (Keysym ScancodeSpace _ _)))) s =
-  s >>= \(b,p,board,dtm,dt,piece, rotation) -> return (b,p,board,dtm,dt,piece, rotation)
+  s >>= \(b,gameOver,p,board,dtm,dt,piece, rotation) -> return (b,gameOver,p,board,dtm,dt,piece, rotation)
 handleEvent (Event e (KeyboardEvent (KeyboardEventData _ Pressed False (Keysym ScancodeE _ _)))) s = 
-  s >>= \(b,p,board,dtm,dt,piece, rotation) -> return (b,p,board,dtm,dt,piece, rotation)
+  s >>= \(b,gameOver,p,board,dtm,dt,piece, rotation) -> return (b,gameOver,p,board,dtm,dt,piece, rotation)
   
 handleEvent (Event e _) s = s
