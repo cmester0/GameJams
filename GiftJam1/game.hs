@@ -13,9 +13,18 @@ import Data.Text.Internal
 
 import Data.Word
 
+import Data.Bits
+
 screenWidth = 1200
 screenHeight = 900
 
+playerSquareSize = 40
+
+minDT = 0
+gravity = 1
+sideToSideSpeed = 0.9
+jumpSpeedFactor = 2
+  
 main :: IO ()
 main = do
   initializeAll
@@ -38,7 +47,8 @@ dirToNum NW = 9
 dirToNum SW = 12
 
 instance Num Direction where
-  a + b = fromInteger (dirToNum a + dirToNum b)
+  a + b = fromInteger ((dirToNum a) .|. (dirToNum b))
+  a * b = fromInteger ((dirToNum a) .&. (dirToNum b)) -- TODO: Is this correct ? What is the semantics?
 
   fromInteger 0 = O
   fromInteger 1 = N
@@ -59,24 +69,29 @@ instance Num Direction where
   fromInteger 14 = S -- SEW
   fromInteger 15 = O -- NSEW
 
-  negate O = O
-  negate N = S
-  negate NE = SW
-  negate E = W
-  negate SE = NW
-  negate S = N
-  negate SW = NE
-  negate W = E
-  negate NW = SE
+  fromInteger _ = O -- Error case
+
+  negate a = fromInteger (xor 15 (dirToNum a))
+
+  abs a = a -- TODO: Is this correct?
+  signum a = a -- TODO: Is this correct?
 
 data State = State { gameOver :: Bool
                    , characterNumber :: Int
-                   , playerPos :: V2 CInt
+                   , playerPos :: V2 CFloat
                    , playerDirection :: Direction
                    , deadPlayers :: [V2 CInt]
-                   , currentTime :: Word32 }
+                   , currentTime :: Word32
+                   , jump :: Bool
+                   , jumpTimer :: CFloat }
 
 tupleToRectangle (x,y,w,h) = Rectangle (P (V2 x y)) (V2 w h)
+
+v2FloatToInt :: V2 CFloat -> V2 CInt
+v2FloatToInt (V2 a b) = V2 (toEnum . fromEnum $ a) (toEnum . fromEnum $ b)
+
+v2IntToFloat :: V2 CInt -> V2 CFloat
+v2IntToFloat (V2 a b) = V2 (toEnum . fromEnum $ a) (toEnum . fromEnum $ b)
 
 initState :: State
 initState = State { gameOver = False
@@ -84,7 +99,9 @@ initState = State { gameOver = False
                   , playerPos = V2 50 50
                   , playerDirection = O
                   , deadPlayers = []
-                  , currentTime = 0 }
+                  , currentTime = 0
+                  , jump = True
+                  , jumpTimer = 1000 }
 
 textOfNumber :: Int -> Text
 textOfNumber 0 = "Zero"
@@ -108,18 +125,32 @@ textOfNumber 17 = "Seventeen"
 textOfNumber 18 = "Eightteen"
 textOfNumber 19 = "Nineteen"
 textOfNumber 20 = "Twenty"
-textOfNumber n | n `elem` [21..29] = mappend (textOfNumber 20) (textOfNumber (n-20))
+textOfNumber n | n `elem` [21..29] = mappend (mappend (textOfNumber 20) " ") (textOfNumber (n-20))
+textOfNumber 30 = "Thirty"
+textOfNumber n | n `elem` [31..39] = mappend (mappend (textOfNumber 30) " ") (textOfNumber (n-30))
+textOfNumber 40 = "Fourty"
+textOfNumber n | n `elem` [41..49] = mappend (mappend (textOfNumber 40) " ") (textOfNumber (n-40))
+textOfNumber 50 = "Fifty"
+textOfNumber n | n `elem` [51..59] = mappend (mappend (textOfNumber 50) " ") (textOfNumber (n-50))
+textOfNumber 60 = "Sixty"
+textOfNumber n | n `elem` [61..69] = mappend (mappend (textOfNumber 60) " ") (textOfNumber (n-60))
+textOfNumber 70 = "Seventy"
+textOfNumber n | n `elem` [71..79] = mappend (mappend (textOfNumber 70) " ") (textOfNumber (n-70))
+textOfNumber 80 = "Eighty"
+textOfNumber n | n `elem` [81..89] = mappend (mappend (textOfNumber 80) " ") (textOfNumber (n-80))
+textOfNumber 90 = "Ninety"
+textOfNumber n | n `elem` [91..99] = mappend (mappend (textOfNumber 90) " ") (textOfNumber (n-90))
+textOfNumber n | n `elem` [100..999] = mappend (mappend (textOfNumber (div n 100)) " Hundred") (if mod n 100 == 0 then " " else mappend " and " (textOfNumber (mod n 100)))
+textOfNumber n | n `elem` [1000..999999] = mappend (mappend (textOfNumber (div n 1000)) " Thousand") (if mod n 1000 == 0 then " " else mappend (if mod n 1000 < 100 then " and " else " ") (textOfNumber (mod n 1000)))
 textOfNumber _ = "Alot"
 
--- minDT = 20
-
-velFromDirection :: Direction -> V2 CInt
+velFromDirection :: Direction -> V2 CFloat
 velFromDirection O = V2 0 0
 
-velFromDirection N = V2 0 (-1)
-velFromDirection E = V2 1 0
-velFromDirection S = V2 0 1
-velFromDirection W = V2 (-1) 0
+velFromDirection N = V2 0 (-jumpSpeedFactor * gravity)
+velFromDirection E = V2 sideToSideSpeed 0
+velFromDirection S = V2 0 (jumpSpeedFactor * gravity)
+velFromDirection W = V2 (-sideToSideSpeed) 0
 
 velFromDirection NE = velFromDirection N + velFromDirection E
 velFromDirection NW = velFromDirection N + velFromDirection W
@@ -129,23 +160,38 @@ velFromDirection SW = velFromDirection S + velFromDirection W
 appLoop :: Window -> Renderer -> State -> IO ()
 appLoop window renderer state =
   pollEvents >>= \events ->
-  -- let state = (foldr handleEvent state events) in
   return (foldr handleEvent state events) >>= \state ->
   ticks >>= \t1 ->
-  let dt  = ((fromInteger . toInteger) (t1 - (currentTime state)) :: CInt) in
-  return (state { playerPos = playerPos state + pure dt * velFromDirection (playerDirection state)
-                , currentTime = t1 }) >>= \state ->
+  let dt  = ((fromInteger . toInteger) (t1 - (currentTime state)) :: CFloat) in
+  let initVel = velFromDirection (playerDirection state) + V2 0 gravity in
+  let velResult = foldr (\a -> collisionCheck (playerPos state) (v2IntToFloat $ V2 playerSquareSize playerSquareSize) (v2IntToFloat a) (v2IntToFloat $ V2 playerSquareSize playerSquareSize)) (initVel, (False,False)) (deadPlayers state) in
+  let (vel, (topHit, botHit)) =
+        collisionCheck (playerPos state) (v2IntToFloat $ V2 playerSquareSize playerSquareSize) (v2IntToFloat $ V2 0 screenHeight) (v2IntToFloat $ V2 screenWidth 10) velResult in
+
+  let preJump = jump state in
+  let preJumpTimer = jumpTimer state in
     
-  do
-    -- putStrLn $ "DT: " ++ (show dt)
-    
+  return (state { playerPos = playerPos state + pure dt * vel
+                , currentTime = t1
+                , jump = jump state && not botHit
+                , jumpTimer =
+                    if jump state -- && jumpTimer state > dt
+                    then jumpTimer state - dt
+                    else 0
+                }) >>= \state ->
+  return (state { playerDirection =
+                  if (not (jump state) && preJump) || (jumpTimer state < dt)
+                  then (playerDirection state + N) + S
+                  else playerDirection state
+                }) >>= \state -> 
+  do    
     windowTitle window $= mappend (textOfNumber (characterNumber state)) (" of many") -- 
     appFillRender renderer state
     -- Present
     present renderer
 
     -- delay (20000 - ((fromInteger . toInteger) dt))
-    -- unless (((fromInteger . toInteger) dt) > minDT) (threadDelay (minDT - ((fromInteger . toInteger) dt)))
+    unless ((toEnum . fromEnum $ dt) > minDT) (threadDelay (minDT - ((toEnum . fromEnum) dt)))
 
     unless (gameOver state) (appLoop window renderer state)
     -- (if gameOver state
@@ -161,18 +207,49 @@ appFillRender renderer state =
     
     -- Draw everything
 
+    -- Draw player
     rendererDrawColor renderer $= V4 0 0 255 255
-    (fillRect renderer . Just) (Rectangle (P (playerPos state)) (V2 10 10))
+    (fillRect renderer . Just) (Rectangle (P (v2FloatToInt $ playerPos state)) (V2 playerSquareSize playerSquareSize))
   
-
-    -- -- Horizontal lines
-    -- rendererDrawColor renderer $= V4 0 0 0 255
-    -- sequence $ map (fillRect renderer . Just) ([0 .. 22] >>= \x -> [Rectangle (P (V2 0 (x * (2 + yStepSize)))) (V2 screenWidth 2)])
-
-    -- -- Vertical lines
-    -- sequence $ map (fillRect renderer . Just) ([0 .. 10] >>= \x -> [Rectangle (P (V2 (x * (2 + xStepSize)) 0)) (V2 2 screenHeight)])
+    -- Draw dead players
+    rendererDrawColor renderer $= V4 0 0 100 255
+    sequence $ map (fillRect renderer . Just) (deadPlayers state >>= \x -> [Rectangle (P x) (V2 playerSquareSize playerSquareSize)])
 
     return ()
+
+minNorm a b = if a*a <= b * b
+              then a
+              else b
+
+collisionCheck :: V2 CFloat -> V2 CFloat -> V2 CFloat -> V2 CFloat -> (V2 CFloat,(Bool,Bool)) -> (V2 CFloat,(Bool,Bool))
+collisionCheck _ _ _ _ (V2 0 0, hit) = (V2 0 0, hit)
+collisionCheck (V2 x y) (V2 wx wy) (V2 a b) (V2 la lb) (V2 vx vy, (topHit,botHit)) =
+  let rlux = a - (x+wx) in
+  let rluy = b - (y+wy) in
+  let rrdx = (a+la) - x in
+  let rrdy = (b+lb) - y in
+  let (xl,xr) = (min rlux rrdx, max rlux rrdx) in
+  let (yl,yr) = (min rluy rrdy, max rluy rrdy) in
+    if (xl < vx && vx < xr) && (yl < vy && vy < yr)
+    then
+      let xcz = minNorm rlux rrdx in
+      let ycz = minNorm rluy rrdy in
+        case (vx,vy) of
+          (vx',0) -> (V2 xcz 0, (topHit,botHit))
+          (0,vy') -> (V2 0 ycz, (vy <= 0,vy > 0))
+          _ ->
+            let tx = ((xcz*vx + ycz*vy) * vx) / (vx*vx + vy*vy) in
+            let ty = ((xcz*vx + ycz*vy) * vy) / (vx*vx + vy*vy) in
+            let cx = (xr + xl) / 2 in
+            let cy = (yr + yl) / 2 in
+            if ((xcz <= cx && ycz <= cy) && ((vx >  0 && ty <= ycz) || vx <= 0)) || -- bottom left  corner cases
+               ((xcz >  cx && ycz <= cy) && ((vx <= 0 && ty <= ycz) || vx >  0)) || -- bottom right corner cases
+               ((xcz <= cx && ycz  > cy) && ((vx >  0 && ty >  ycz) || vx <= 0)) || -- top    left  corner cases
+               ((xcz >  cx && ycz  > cy) && ((vx <= 0 && ty >  ycz) || vx >  0))    -- top    right corner cases
+            then (V2 vx ycz,(vy <= 0,vy > 0)) -- x free , y  hit
+            else (V2 xcz vy,(topHit,botHit))   -- x  hit , y free
+    else (V2 vx vy,(topHit,botHit))
+
 
   
 handleEvent :: Event -> State -> State
@@ -184,14 +261,27 @@ handleEvent _ s = s
 handleKeyPressEvent :: (Scancode, Keycode, KeyModifier) -> State -> State
 handleKeyPressEvent (ScancodeEscape, _, _) s = s {gameOver = True}
 handleKeyPressEvent (ScancodeLeft, _, _) s =   s {playerDirection = playerDirection s + W}
-handleKeyPressEvent (ScancodeUp, _, _) s =     s {playerDirection = playerDirection s + N}
+-- handleKeyPressEvent (ScancodeUp, _, _) s =     s {playerDirection = playerDirection s + N}
 handleKeyPressEvent (ScancodeRight, _, _) s =  s {playerDirection = playerDirection s + E}
-handleKeyPressEvent (ScancodeDown, _, _) s =   s {playerDirection = playerDirection s + S}
+-- handleKeyPressEvent (ScancodeDown, _, _) s =   s {playerDirection = playerDirection s + S}
+handleKeyPressEvent (ScancodeSpace, _, _) s =
+  if not $ jump s
+  then
+    s {playerDirection = playerDirection s + N
+         , jump = True
+         , jumpTimer = 200 }
+  else s
+
+handleKeyPressEvent (ScancodeDelete, _, _) s =   s {playerPos = playerPos initState
+                                                   , characterNumber = characterNumber s + 1
+                                                   , deadPlayers = deadPlayers s ++ [v2FloatToInt $ playerPos s]}
+
 handleKeyPressEvent (_, _, _) s = s
 
 handleKeyReleaseEvent :: (Scancode, Keycode, KeyModifier) -> State -> State
 handleKeyReleaseEvent (ScancodeLeft, _, _) s =  s {playerDirection = playerDirection s - W}
-handleKeyReleaseEvent (ScancodeUp, _, _) s =    s {playerDirection = playerDirection s - N}
+-- handleKeyReleaseEvent (ScancodeUp, _, _) s =    s {playerDirection = playerDirection s - N}
 handleKeyReleaseEvent (ScancodeRight, _, _) s = s {playerDirection = playerDirection s - E}
-handleKeyReleaseEvent (ScancodeDown, _, _) s =  s {playerDirection = playerDirection s - S}
+-- handleKeyReleaseEvent (ScancodeDown, _, _) s =  s {playerDirection = playerDirection s - S}
 handleKeyReleaseEvent (_, _, _) s = s
+
