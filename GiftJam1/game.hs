@@ -6,7 +6,7 @@ import Control.Monad (unless)
 import SDL hiding (get, E)
 import SDL.Time 
 import Linear (V4(..))
-import Control.Concurrent
+import Control.Concurrent (threadDelay)
 import Foreign.C.Types
 
 import Data.Text.Internal
@@ -19,8 +19,9 @@ screenWidth = 1200
 screenHeight = 900
 
 playerSquareSize = 40
+buttonSquareSize = 10
 
-minDT = 0
+minDT = 0 -- 10000
 gravity = 1
 sideToSideSpeed = 0.9
 jumpSpeedFactor = 2
@@ -83,7 +84,34 @@ data State = State { gameOver :: Bool
                    , deadPlayers :: [V2 CInt]
                    , currentTime :: Word32
                    , jump :: Bool
-                   , jumpTimer :: CFloat }
+                   , jumpTimer :: CFloat
+                   , currentLevel :: Int
+                   , buttonsPressed :: [Int] }
+
+data LevelObject = Box CInt CInt CInt CInt
+                 | ButtonBox LevelObject [Int] LevelObject
+
+data LevelButton = Button CInt CInt Int
+
+
+levelButtons :: [[LevelButton]]
+levelButtons = [
+  [Button (screenWidth-50) (screenHeight-100) 0,
+   Button 200 (screenHeight-200) 1]
+  ]
+
+levels :: [[LevelObject]]
+levels = [
+  [Box 0 0 screenWidth 3,
+   Box 0 0 3 screenHeight,
+   ButtonBox (Box (screenWidth-3) 0 3 screenHeight) [0,1] (Box 0 0 0 0),
+   Box 0 (screenHeight-3) screenWidth 3,
+   ButtonBox (Box (200 - 20 + div buttonSquareSize 2) (screenHeight - 220 + div buttonSquareSize 2) 3 40) [0] (Box 0 0 0 0),
+   ButtonBox (Box (200 - 20 + div buttonSquareSize 2) (screenHeight - 180 + div buttonSquareSize 2) 43 3) [0] (Box 0 0 0 0),
+   ButtonBox (Box (200 + 20 + div buttonSquareSize 2) (screenHeight - 220 + div buttonSquareSize 2) 3 40) [0] (Box 0 0 0 0),
+   ButtonBox (Box (200 - 20 + div buttonSquareSize 2) (screenHeight - 220 + div buttonSquareSize 2) 40 3) [0] (Box 0 0 0 0)]
+  ]
+             
 
 tupleToRectangle (x,y,w,h) = Rectangle (P (V2 x y)) (V2 w h)
 
@@ -101,7 +129,9 @@ initState = State { gameOver = False
                   , deadPlayers = []
                   , currentTime = 0
                   , jump = True
-                  , jumpTimer = 1000 }
+                  , jumpTimer = 1000
+                  , currentLevel = 0
+                  , buttonsPressed = [] }
 
 textOfNumber :: Int -> Text
 textOfNumber 0 = "Zero"
@@ -157,6 +187,25 @@ velFromDirection NW = velFromDirection N + velFromDirection W
 velFromDirection SE = velFromDirection S + velFromDirection E
 velFromDirection SW = velFromDirection S + velFromDirection W
 
+levelObjectToV2Pair :: State -> LevelObject -> (V2 CFloat, V2 CFloat)
+levelObjectToV2Pair _ (Box x y w h) = (v2IntToFloat $ V2 x y, v2IntToFloat $ V2 w h)
+levelObjectToV2Pair s (ButtonBox lo0 c lo1) =
+  levelObjectToV2Pair s $
+  if foldr (\a b -> b && a `elem` buttonsPressed s) True c
+  then lo1
+  else lo0
+
+rectangleFromLevelObject :: State -> LevelObject -> Rectangle CInt
+rectangleFromLevelObject _ (Box x y w h) = Rectangle (P $ V2 x y) (V2 w h)
+rectangleFromLevelObject s (ButtonBox lo0 c lo1) =
+  rectangleFromLevelObject s $
+  if foldr (\a b -> b && a `elem` buttonsPressed s) True c
+  then lo1
+  else lo0
+
+projectV2 :: V2 a -> a
+projectV2 (V2 x y) = y
+  
 appLoop :: Window -> Renderer -> State -> IO ()
 appLoop window renderer state =
   pollEvents >>= \events ->
@@ -164,18 +213,26 @@ appLoop window renderer state =
   ticks >>= \t1 ->
   let dt  = ((fromInteger . toInteger) (t1 - (currentTime state)) :: CFloat) in
   let initVel = velFromDirection (playerDirection state) + V2 0 gravity in
-  let velResult = foldr (\a -> collisionCheck (playerPos state) (v2IntToFloat $ V2 playerSquareSize playerSquareSize) (v2IntToFloat a) (v2IntToFloat $ V2 playerSquareSize playerSquareSize)) (initVel, (False,False)) (deadPlayers state) in
-  let (vel, (topHit, botHit)) =
-        collisionCheck (playerPos state) (v2IntToFloat $ V2 playerSquareSize playerSquareSize) (v2IntToFloat $ V2 0 screenHeight) (v2IntToFloat $ V2 screenWidth 10) velResult in
+  let colBoxes = ((deadPlayers state) >>= \a -> return $ ((v2IntToFloat a), (v2IntToFloat $ V2 playerSquareSize playerSquareSize)))
+              -- ++ [((v2IntToFloat $ V2 0 screenHeight),(v2IntToFloat $ V2 screenWidth 10))]
+              ++ (levels !! currentLevel state >>= return . levelObjectToV2Pair state) in
+
+  let (vel, (topHit, botHit,_)) = foldr (\(a,b) -> collisionCheck (playerPos state) (v2IntToFloat $ V2 playerSquareSize playerSquareSize) a b) (initVel, (False,False,False)) colBoxes in
+  return (state { buttonsPressed = buttonsPressed state ++
+                  (levelButtons !! currentLevel state >>= \(Button a b i) ->
+                    let (_, (_,_,hit)) = collisionCheck (playerPos state) (v2IntToFloat $ V2 playerSquareSize playerSquareSize) (v2IntToFloat $ V2 a b) (v2IntToFloat $ V2 buttonSquareSize buttonSquareSize) (vel, (False,False,False)) in if hit then [i] else [])
+                }) >>= \state ->
+    
+  -- let (vel, (topHit, botHit)) =
+  --       collisionCheck (playerPos state) (v2IntToFloat $ V2 playerSquareSize playerSquareSize) (v2IntToFloat $ V2 0 screenHeight) (v2IntToFloat $ V2 screenWidth 10) velResult in
 
   let preJump = jump state in
-  let preJumpTimer = jumpTimer state in
     
   return (state { playerPos = playerPos state + pure dt * vel
                 , currentTime = t1
                 , jump = jump state && not botHit
                 , jumpTimer =
-                    if jump state -- && jumpTimer state > dt
+                    if jump state && not topHit
                     then jumpTimer state - dt
                     else 0
                 }) >>= \state ->
@@ -183,17 +240,25 @@ appLoop window renderer state =
                   if (not (jump state) && preJump) || (jumpTimer state < dt)
                   then (playerDirection state + N) + S
                   else playerDirection state
-                }) >>= \state -> 
-  do    
-    windowTitle window $= mappend (textOfNumber (characterNumber state)) (" of many") -- 
-    appFillRender renderer state
-    -- Present
-    present renderer
+                }) >>= \state ->
 
-    -- delay (20000 - ((fromInteger . toInteger) dt))
-    unless ((toEnum . fromEnum $ dt) > minDT) (threadDelay (minDT - ((toEnum . fromEnum) dt)))
+  return (if (toEnum . fromEnum . projectV2) (playerPos state) > screenWidth
+          then state { playerPos = playerPos initState
+                      , currentLevel = currentLevel state + 1
+                      , gameOver = currentLevel state + 1 == length levels}
+          else state) >>= \state ->
 
-    unless (gameOver state) (appLoop window renderer state)
+  unless (gameOver state)
+  (do    
+      windowTitle window $= mappend (textOfNumber (characterNumber state)) (" of many") -- 
+      appFillRender renderer state
+      -- Present
+      present renderer
+
+      -- delay (20000 - ((fromInteger . toInteger) dt))
+      unless ((toEnum . fromEnum $ dt) > minDT) (threadDelay (minDT - ((toEnum . fromEnum) dt)))
+
+      appLoop window renderer state)
     -- (if gameOver state
     --  then putStrLn "Game Over"
     --  else appLoop window renderer state)
@@ -215,15 +280,25 @@ appFillRender renderer state =
     rendererDrawColor renderer $= V4 0 0 100 255
     sequence $ map (fillRect renderer . Just) (deadPlayers state >>= \x -> [Rectangle (P x) (V2 playerSquareSize playerSquareSize)])
 
+    -- Draw level
+    rendererDrawColor renderer $= V4 200 100 200 255
+    sequence $ map (fillRect renderer . Just) (levels !! currentLevel state >>= return . rectangleFromLevelObject state)
+
+    -- Draw buttons
+    rendererDrawColor renderer $= V4 255 0 0 255
+    sequence $ map (fillRect renderer . Just) (levelButtons !! currentLevel state >>= \(Button a b c) -> return $ Rectangle (P $ V2 a b) (V2 buttonSquareSize buttonSquareSize))
+
+
+
     return ()
 
 minNorm a b = if a*a <= b * b
               then a
               else b
 
-collisionCheck :: V2 CFloat -> V2 CFloat -> V2 CFloat -> V2 CFloat -> (V2 CFloat,(Bool,Bool)) -> (V2 CFloat,(Bool,Bool))
+collisionCheck :: V2 CFloat -> V2 CFloat -> V2 CFloat -> V2 CFloat -> (V2 CFloat,(Bool,Bool,Bool)) -> (V2 CFloat,(Bool,Bool,Bool))
 collisionCheck _ _ _ _ (V2 0 0, hit) = (V2 0 0, hit)
-collisionCheck (V2 x y) (V2 wx wy) (V2 a b) (V2 la lb) (V2 vx vy, (topHit,botHit)) =
+collisionCheck (V2 x y) (V2 wx wy) (V2 a b) (V2 la lb) (V2 vx vy, (topHit,botHit,hit)) =
   let rlux = a - (x+wx) in
   let rluy = b - (y+wy) in
   let rrdx = (a+la) - x in
@@ -235,8 +310,8 @@ collisionCheck (V2 x y) (V2 wx wy) (V2 a b) (V2 la lb) (V2 vx vy, (topHit,botHit
       let xcz = minNorm rlux rrdx in
       let ycz = minNorm rluy rrdy in
         case (vx,vy) of
-          (vx',0) -> (V2 xcz 0, (topHit,botHit))
-          (0,vy') -> (V2 0 ycz, (vy <= 0,vy > 0))
+          (vx',0) -> (V2 xcz 0, (topHit,botHit,True)) -- Collision ?
+          (0,vy') -> (V2 0 ycz, (vy <= 0,vy > 0,True)) -- Collision ?
           _ ->
             let tx = ((xcz*vx + ycz*vy) * vx) / (vx*vx + vy*vy) in
             let ty = ((xcz*vx + ycz*vy) * vy) / (vx*vx + vy*vy) in
@@ -246,9 +321,9 @@ collisionCheck (V2 x y) (V2 wx wy) (V2 a b) (V2 la lb) (V2 vx vy, (topHit,botHit
                ((xcz >  cx && ycz <= cy) && ((vx <= 0 && ty <= ycz) || vx >  0)) || -- bottom right corner cases
                ((xcz <= cx && ycz  > cy) && ((vx >  0 && ty >  ycz) || vx <= 0)) || -- top    left  corner cases
                ((xcz >  cx && ycz  > cy) && ((vx <= 0 && ty >  ycz) || vx >  0))    -- top    right corner cases
-            then (V2 vx ycz,(vy <= 0,vy > 0)) -- x free , y  hit
-            else (V2 xcz vy,(topHit,botHit))   -- x  hit , y free
-    else (V2 vx vy,(topHit,botHit))
+            then (V2 vx ycz,(vy <= 0,vy > 0,True)) -- x free , y  hit
+            else (V2 xcz vy,(topHit,botHit,True))   -- x  hit , y free
+    else (V2 vx vy,(topHit,botHit,hit))
 
 
   
@@ -269,12 +344,18 @@ handleKeyPressEvent (ScancodeSpace, _, _) s =
   then
     s {playerDirection = playerDirection s + N
          , jump = True
-         , jumpTimer = 200 }
+         , jumpTimer = 2000 }
   else s
 
-handleKeyPressEvent (ScancodeDelete, _, _) s =   s {playerPos = playerPos initState
-                                                   , characterNumber = characterNumber s + 1
-                                                   , deadPlayers = deadPlayers s ++ [v2FloatToInt $ playerPos s]}
+handleKeyPressEvent (ScancodeDelete, _, _) s =
+  if not $ jump s
+  then 
+    s {playerPos = playerPos initState
+      , characterNumber = characterNumber s + 1
+      , deadPlayers = deadPlayers s ++ [v2FloatToInt $ playerPos s]
+      , jump = jump initState
+      , jumpTimer = jumpTimer initState}
+  else s
 
 handleKeyPressEvent (_, _, _) s = s
 
