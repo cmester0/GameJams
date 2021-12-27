@@ -101,7 +101,8 @@ levelEnemies = [
   [Spike 300 (screenHeight - 50) 40 40,
    Spike 500 0 40 (screenHeight - 80),
    Spike 650 (screenHeight - 50) 40 40,
-   Spike 700 (screenHeight - 80) 40 40]
+   Spike 700 (screenHeight - 80) 40 40],
+  []
   ]
 
 
@@ -109,7 +110,9 @@ levelButtons :: [[LevelButton]]
 levelButtons = [
   [Button (screenWidth-50) (screenHeight-100) 0,
    Button 200 (screenHeight-200) 1],
-  []
+  [],
+  [Button (screenWidth-50) (screenHeight-100) 0,
+   Button 200 (screenHeight-200) 1]
   ]
 
 levels :: [[LevelObject]]
@@ -124,7 +127,12 @@ levels = [
    ButtonBox (Box (200 - 20 + div buttonSquareSize 2) (screenHeight - 220 + div buttonSquareSize 2) 40 3) [0] (Box 0 0 0 0)],
   [Box 0 0 screenWidth 3,
    Box 0 0 3 screenHeight,
-   Box 0 (screenHeight-3) screenWidth 3]
+   Box 0 (screenHeight-3) screenWidth 3],
+  [Box 0 0 screenWidth 3,
+   Box 0 0 3 screenHeight,
+   ButtonBox (Box (screenWidth-3) 0 3 screenHeight) [0,1] (Box 0 0 0 0),
+   Box 0 (screenHeight-3) screenWidth 3,
+   ButtonBox (Box 100 100 10 10) [0] (Box 100 100 20 20)]
   ]
              
 
@@ -145,7 +153,7 @@ initState = State { gameOver = False
                   , currentTime = 4294967295
                   , jump = True
                   , jumpTimer = 150
-                  , currentLevel = 0
+                  , currentLevel = 2
                   , buttonsPressed = [] }
 
 textOfNumber :: Int -> Text
