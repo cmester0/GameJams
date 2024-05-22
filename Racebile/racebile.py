@@ -1,5 +1,6 @@
 from math import cos, sin, pi
 
+import random
 from PIL import Image
 
 # Setup
@@ -58,6 +59,77 @@ game_map = [
     (1,-2,2),
     (0,-1,1)]
 
+def step_dir(x,y,d):
+    if d == 0:
+        return (x+1, y+0)
+    elif d == 1:
+        return (x+0, y+1)
+    elif d == 2:
+        return (x-1, y+1)
+    elif d == 3:
+        return (x-1, y+0)
+    elif d == 4:
+        return (x+0, y-1)
+    elif d == 5:
+        return (x+1, y-1)
+
+def weigh_direction_towards_start(x,y,d):
+    (nx, ny) = step_dir(0,0,(d-1)%6)
+    w1 = ((x - nx) ** 2 + (y - ny) ** 2)
+    (nx, ny) = step_dir(0,0,(d+0)%6)
+    w2 = ((x - nx) ** 2 + (y - ny) ** 2)
+    (nx, ny) = step_dir(0,0,(d+1)%6)
+    w3 = ((x - nx) ** 2 + (y - ny) ** 2)
+    r = random.randint(0,w1+w2+w3-1)
+    if 0 <= r <= w1:
+        return -1
+    elif w1 <= r <= w1+w2:
+        return 0
+    else:
+        return 1
+
+def gen_map_from_dirs(dirs):
+    x = 0
+    y = 0
+    gm = []
+    for d in dirs:
+        gm.append((x,y,d))
+        x,y = step_dir(x,y,d)
+    return gm
+
+def extend_dirs_randomly(d):
+    dirs = list(d)
+    index = random.randint(0,len(dirs)-1)
+
+    if index+2 < len(dirs) and dirs[index] == dirs[index+1] and dirs[index+1] == dirs[index+2]:
+        if random.randint(0,1) == 0:
+            dirs = dirs[:index] + ([(dirs[index]-1)%6, (dirs[index])%6, (dirs[index])%6, (dirs[index]+1)%6]) + dirs[index+3:]
+        else:
+            dirs = dirs[:index] + ([(dirs[index]+1)%6, (dirs[index])%6, (dirs[index])%6, (dirs[index]-1)%6]) + dirs[index+3:]
+    elif (dirs[index]+3)%6 in dirs:
+        dirs = dirs[:index] + [dirs[index]] * 2 + dirs[index+1:]
+        other = list(filter(lambda x: x[1] == (dirs[index]+3)%6, enumerate(dirs)))
+        index = random.randint(0,len(other)-1)
+        index, value = other[index]
+        dirs = dirs[:index] + [value]*2 + dirs[index+1:]
+
+    return dirs
+
+def gen_map():
+    dirs = []
+    for i in range(6):
+        dirs.append(i)
+        dirs.append(i)
+        dirs.append(i)
+
+    for i in range(30):
+        dirs = extend_dirs_randomly(dirs)
+
+    return gen_map_from_dirs(dirs)
+
+
+game_map = gen_map()
+
 # Game
 
 for i in range(-10,10):
@@ -73,7 +145,7 @@ for i in range(-10,10):
         color = (255, 255, 255)
         draw_hex(m, xi, yi, scale, color)
 
-for i,j,d in game_map:
+for iters,(i,j,d) in enumerate(game_map):
     scale = 10
     xi, yi = hex_coord(i, j)
     xi = width // 2 + xi * (scale * 4)
@@ -83,7 +155,7 @@ for i,j,d in game_map:
         continue
 
     # color = (255,255,0)
-    color = (int(i / 100 * 255), int((j + 100) / 200) * 255, 255)
+    color = (int(i / 100 * 255), int((j + 100) / 200) * 255, int(iters / len(game_map) * 255))
 
     draw_filled_hex(m, xi, yi, scale, color)
 
