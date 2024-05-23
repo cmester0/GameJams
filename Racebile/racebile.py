@@ -3,6 +3,8 @@ from math import cos, sin, pi
 import random
 from PIL import Image
 
+import heapq
+
 # Setup
 width = 2000
 height = 2000
@@ -36,28 +38,6 @@ def draw_hex_dir(m, xi, yi, d, scale, color):
     for k in range(int(scale * 1.5)):
         rx,ry = cos(d*pi/3+pi/6)*k, sin(d*pi/3+pi/6)*k
         m[int(xi+rx)][int(yi+ry)] = color
-
-
-game_map = [
-    (0,0,1),
-    (0,1,1),
-    (0,2,1),
-    (0,3,1),
-    (0,4,0),
-    (1,4,0),
-    (2,4,5),
-    (3,3,5),
-    (4,2,4),
-    (4,1,4),
-    (4,0,4),
-    (4,-1,4),
-    (4,-2,4),
-    (4,-3,4),
-    (4,-4,3),
-    (3,-4,2),
-    (2,-3,2),
-    (1,-2,2),
-    (0,-1,1)]
 
 def step_dir(x,y,d):
     if d == 0:
@@ -97,35 +77,71 @@ def gen_map_from_dirs(dirs):
         x,y = step_dir(x,y,d)
     return gm
 
-def extend_dirs_randomly(d):
-    dirs = list(d)
-    index = random.randint(0,len(dirs)-1)
+def bfs(x0,y0,d0,x1,y1,d1,exclude=set()):
+    stk = [(0,x0,y0,d0,[])]
+    visited = set()
+    while len(stk) > 0:
+        s,x,y,d,r = heapq.heappop(stk)
 
-    if index+2 < len(dirs) and dirs[index] == dirs[index+1] and dirs[index+1] == dirs[index+2]:
-        if random.randint(0,1) == 0:
-            dirs = dirs[:index] + ([(dirs[index]-1)%6, (dirs[index])%6, (dirs[index])%6, (dirs[index]+1)%6]) + dirs[index+3:]
-        else:
-            dirs = dirs[:index] + ([(dirs[index]+1)%6, (dirs[index])%6, (dirs[index])%6, (dirs[index]-1)%6]) + dirs[index+3:]
-    elif (dirs[index]+3)%6 in dirs:
-        dirs = dirs[:index] + [dirs[index]] * 2 + dirs[index+1:]
-        other = list(filter(lambda x: x[1] == (dirs[index]+3)%6, enumerate(dirs)))
-        index = random.randint(0,len(other)-1)
-        index, value = other[index]
-        dirs = dirs[:index] + [value]*2 + dirs[index+1:]
+        if len(stk) > 0 and (x,y) in exclude or (x,y) in r:
+            continue
 
-    return dirs
+        if not (-100 <= x <= 100 or -100 <= y <= 100):
+            continue
+
+        if (x,y) == (x1,y1) and (d - d1)%6 == 0:
+            print ("success")
+            return r[:-1] + [(x1,y1,d1)]
+        if (x,y,d) in visited:
+            continue
+        visited.add((x,y,d))
+
+        nx, ny = step_dir(x,y,d)
+        heapq.heappush(stk,(s+1, nx, ny, (d+1)%6, r + [(nx, ny, (d+1)%6)]))
+        heapq.heappush(stk,(s+1, nx, ny, d, r + [(nx, ny, d)]))
+        heapq.heappush(stk,(s+1, nx, ny, (d-1)%6, r + [(nx, ny, (d-1)%6)]))
+    return []
+
+# def extend_dirs_randomly(d):
+#     dirs = list(d)
+#     index = random.randint(0,len(dirs)-1)
+
+#     if index+2 < len(dirs) and dirs[index] == dirs[index+1] and dirs[index+1] == dirs[index+2]:
+#         if random.randint(0,1) == 0:
+#             dirs = dirs[:index] + ([(dirs[index]-1)%6, (dirs[index])%6, (dirs[index])%6, (dirs[index]+1)%6]) + dirs[index+3:]
+#         else:
+#             dirs = dirs[:index] + ([(dirs[index]+1)%6, (dirs[index])%6, (dirs[index])%6, (dirs[index]-1)%6]) + dirs[index+3:]
+#     elif (dirs[index]+3)%6 in dirs:
+#         dirs = dirs[:index] + [dirs[index]] * 2 + dirs[index+1:]
+#         other = list(filter(lambda x: x[1] == (dirs[index]+3)%6, enumerate(dirs)))
+#         index = random.randint(0,len(other)-1)
+#         index, value = other[index]
+#         dirs = dirs[:index] + [value]*2 + dirs[index+1:]
+
+#     return dirs
 
 def gen_map():
-    dirs = []
-    for i in range(6):
-        dirs.append(i)
-        dirs.append(i)
-        dirs.append(i)
+    x,y,d = 0,0,1
+    l = []
 
-    for i in range(30):
-        dirs = extend_dirs_randomly(dirs)
+    success = 0
+    while success < 3:
+        nx = random.randint(-10,10)
+        ny = random.randint(-10,10)
+        nd = random.randint(0,5)
 
-    return gen_map_from_dirs(dirs)
+        nl = bfs(x,y,d,nx,ny,nd,set(map(lambda x: (x[0], x[1]),l)))
+        if nl == []:
+            continue
+
+        l += nl
+        x,y,d = nx, ny, nd
+
+        success += 1
+
+    l += bfs(x,y,d,0,0,1,set(map(lambda x: (x[0], x[1]),l)))
+
+    return l
 
 
 game_map = gen_map()
@@ -155,7 +171,7 @@ for iters,(i,j,d) in enumerate(game_map):
         continue
 
     # color = (255,255,0)
-    color = (int(i / 100 * 255), int((j + 100) / 200) * 255, int(iters / len(game_map) * 255))
+    color = (0, int(iters / len(game_map) * 200), 255)
 
     draw_filled_hex(m, xi, yi, scale, color)
 
