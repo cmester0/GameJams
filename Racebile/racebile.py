@@ -1,4 +1,5 @@
 from math import cos, sin, pi, floor, ceil
+import colorsys
 
 import random
 from PIL import Image
@@ -6,16 +7,20 @@ from PIL import Image
 import heapq
 
 # Setup
-width = 3000
-height = 3000
+width = 1000
+height = 1000
 
 # Helper functions
 
-def hex_coord(x,y,scale):
+def raw_hax_coord(x, y):
     xs, ys = 3 * cos(pi/3), sin(pi/3)
     xi, yi = (xs * x, ys * (x + y * 2))
-    xi = width // 2 + xi * scale
-    yi = height // 2 + yi * scale
+    return xi, yi
+
+def hex_coord(x,y,cx,cy,scale):
+    xi,yi = raw_hax_coord(x,y)
+    xi = width // 2-cx + xi * scale
+    yi = height // 2-cy + yi * scale
     return xi, yi
 
 def draw_hex(m, xi, yi, scale, color):
@@ -85,7 +90,6 @@ def bfs(x0,y0,d0,x1,y1,d1,exclude=set()):
     while len(stk) > 0:
         s,x,y,d,r = heapq.heappop(stk)
 
-        
         if len(stk) > 0 and (x,y) in exclude or (x,y) in r:
             continue
 
@@ -109,27 +113,19 @@ def bfs(x0,y0,d0,x1,y1,d1,exclude=set()):
 
     return []
 
-# def extend_dirs_randomly(d):
-#     dirs = list(d)
-#     index = random.randint(0,len(dirs)-1)
-
-#     if index+2 < len(dirs) and dirs[index] == dirs[index+1] and dirs[index+1] == dirs[index+2]:
-#         if random.randint(0,1) == 0:
-#             dirs = dirs[:index] + ([(dirs[index]-1)%6, (dirs[index])%6, (dirs[index])%6, (dirs[index]+1)%6]) + dirs[index+3:]
-#         else:
-#             dirs = dirs[:index] + ([(dirs[index]+1)%6, (dirs[index])%6, (dirs[index])%6, (dirs[index]-1)%6]) + dirs[index+3:]
-#     elif (dirs[index]+3)%6 in dirs:
-#         dirs = dirs[:index] + [dirs[index]] * 2 + dirs[index+1:]
-#         other = list(filter(lambda x: x[1] == (dirs[index]+3)%6, enumerate(dirs)))
-#         index = random.randint(0,len(other)-1)
-#         index, value = other[index]
-#         dirs = dirs[:index] + [value]*2 + dirs[index+1:]
-
-#     return dirs
+def starting_platform():
+    return [(0,0,1),
+            (-1,0,0),
+            (0,-1,1),
+            (-1,-1,0),
+            (0,-2,1),
+            (-1,-2,0),
+            (0,-3,1),
+            (-1,-3,0)]
 
 def gen_map():
     x,y,d = 0,0,1
-    l = [(x,y,d)]
+    l = starting_platform()
     steps = [(x,y,d)]
 
     count = 0
@@ -138,7 +134,7 @@ def gen_map():
 
     while len(steps) <= total_steps:
         if len(steps) == total_steps:
-            nx, ny, nd = 0,-1,1
+            nx, ny, nd = (0,-4,1)
         else:
             nx = random.randint(-10,10)
             ny = random.randint(-10,10)
@@ -146,12 +142,8 @@ def gen_map():
 
         count += 1
         if count > 4:
-            # steps.pop()
-            # while l[-1] != steps[-1]:
-            #     l.pop()
-            # x,y,d = l[-1]
             x,y,d = 0,0,1
-            l = [(x,y,d)]
+            l = starting_platform()
             steps = [(x,y,d)]
             count = 0
             print ("backtrack")
@@ -168,15 +160,13 @@ def gen_map():
 
     return l
 
-def draw_map(m, game_map, players):
-    scale = 20
-
+def draw_map(m, game_map, players, player_steps, cx, cy, scale):
     # Grid
-    for i in range(-20,20):
-        for j in range(-30,30):
-            xi, yi = hex_coord(i, j, scale)
+    for i in range(-40,40):
+        for j in range(-40,40):
+            xi, yi = hex_coord(i, j, cx, cy, scale)
 
-            if not (2 * scale <= xi < width-2 * scale and 2 * scale <= yi < width-2 * scale):
+            if not (scale <= xi < width-scale and scale <= yi < width-scale):
                 continue
 
             color = (255, 255, 255)
@@ -184,47 +174,95 @@ def draw_map(m, game_map, players):
 
     # Map
     for iters,(i,j,d) in enumerate(game_map):
-        xi, yi = hex_coord(i, j, scale)
+        xi, yi = hex_coord(i, j, cx, cy, scale)
 
-        if not (2 * scale <= xi < width-2 * scale and 2 * scale <= yi < width-2 * scale):
+        if not (scale <= xi < width-scale and scale <= yi < width-scale):
             continue
 
         # color = (255,255,0)
-        color = (0, int(iters / len(game_map) * 200), 255)
-        if iters == 0:
-            color = (255, 0, 0)
+        color = (0, int(iters / len(game_map) * 100), 100)
 
         draw_filled_hex(m, xi, yi, scale, color)
 
+        if iters == 0:
+            draw_hex_dir(m, xi, yi+3, -0.5, scale, (255,0,0))
+            draw_hex_dir(m, xi, yi+3, 2.5, scale, (255,0,0))
+
         draw_hex_dir(m, xi, yi, d, scale, (255,255,0))
 
-    # Players
-    for (i,j,d,_) in players:
-        xi, yi = hex_coord(i, j, scale)
+    pl, player_steps = player_steps
+    for ps,(i,j,d) in enumerate(player_steps):
+        xi, yi = hex_coord(i, j, cx, cy, scale)
 
-        if not (2 * scale <= xi < width-2 * scale and 2 * scale <= yi < width-2 * scale):
+        if not (scale <= xi < width-scale and scale <= yi < width-scale):
             continue
 
-        # color = (255,255,0)
-        color = (0, 255, 0)
+        h = pl / len(players)
+        s = ((ps+1) / (len(player_steps)+1))
+        v = ((ps+1) / (len(player_steps)+1))
+        r, g, b = colorsys.hsv_to_rgb(h,s,v)
 
-        draw_hex(m, xi, yi, scale // 2-1, color)
-        draw_hex(m, xi, yi, scale // 2+1, color)
+        color = (int(r * 255), int(g * 255), int(b * 255))
+
+        draw_hex(m, xi, yi, scale // 2-pl-1, color)
+        draw_hex(m, xi, yi, scale // 2+pl+1, color)
+        draw_hex(m, xi, yi, scale // 2-pl, color)
+        draw_hex(m, xi, yi, scale // 2+pl, color)
         draw_hex_dir(m, xi, yi, d, scale, color)
 
-game_map = gen_map()
-players = [(0,0,1,1)]
+    # Players
+    for pl, (i,j,d,_) in enumerate(players):
+        xi, yi = hex_coord(i, j, cx, cy, scale)
 
-def save_map(filename, game_map, players):
+        if not (scale <= xi < width-scale and scale <= yi < width-scale):
+            continue
+
+        h = pl / len(players)
+        s = 1.0
+        v = 1.0
+        r, g, b = colorsys.hsv_to_rgb(h,s,v)
+
+        color = (int(r * 255), int(g * 255), int(b * 255))
+
+        draw_hex(m, xi, yi, scale // 2-pl-1, color)
+        draw_hex(m, xi, yi, scale // 2+pl+1, color)
+        draw_hex(m, xi, yi, scale // 2-pl, color)
+        draw_hex(m, xi, yi, scale // 2+pl, color)
+        draw_hex_dir(m, xi, yi, d, scale, color)
+
+
+game_map = gen_map()
+
+xm = list(map(lambda x: x[0], game_map))
+xi_max, xi_min = (max(xm), min(xm))
+
+ym = list(map(lambda x: (x[0] + x[1] * 2), game_map))
+yi_max, yi_min = (max(ym), min(ym))
+
+x_max, y_max = raw_hax_coord(xi_max + 1, yi_max + 1)
+x_min, y_min = raw_hax_coord(xi_min - 1, yi_min - 1)
+
+cx = (x_max + x_min) // 2
+cy = (y_max + y_min) // 2
+scale = min(int(1.5 * width / (x_max - x_min)), int(1.5 * height / (y_max - y_min)))
+
+players = list(map(lambda x: (*x,0), starting_platform())) # (-1,1,1,0), (-1,0,1,0), (0,-1,1,0)]
+
+def save_map(filename, game_map, players, player_steps, scale):
     m = [[(0, 0, 0) for j in range(height)] for i in range(width)]
 
-    draw_map(m, game_map, players)
+    draw_filled_hex(m, xi_max-1, yi_max-1, scale, (255,255,100))
+    draw_filled_hex(m, xi_min+1, yi_min+1, scale, (255,255,100))
+
+    draw_map(m, game_map, players, player_steps, cx, cy, scale)
 
     flat_m = [m[i][j] for j in reversed(range(height)) for i in range(width)]
 
     img = Image.new('RGB', (width, height)) # width, height
     img.putdata(flat_m)
     img.save(filename)
+
+    return img
 
 def lookup_in_map(x,y):
     l = list(filter(lambda v: v[0] == x and v[1] == y, game_map))
@@ -233,53 +271,102 @@ def lookup_in_map(x,y):
     else:
         return l[0]
 
+def player_block(x,y):
+    l = list(filter(lambda v: v[0] == x and v[1] == y, players))
+    return len(l) >= 2
+
 def step_dir_update_dir(x,y,d):
     nx, ny = step_dir(x,y,d)
+    if player_block(nx,ny):
+        return x,y, lookup_in_map(x,y)[2], False, True
+
     nd = lookup_in_map(nx,ny)[2]
-    return nx, ny, nd, d == nd
+    return nx, ny, nd, d == nd, False
 
 def step_dir_n(x,y,d,n, sips):
+    player_steps = []
+    player_steps.append((x,y,d))
+
     if lookup_in_map(x,y) is None:
         x,y = step_dir(x,y,(d+3)%6)
         d = lookup_in_map(x,y)[2]
+        player_steps.append((x,y,d))
 
     if n <= 9:
-        for _ in "*"*n:
-            x,y,d,t = step_dir_update_dir(x,y,d)
+        for ni in range(n):
+            x,y,d,t,bonk = step_dir_update_dir(x,y,d)
+
+            if bonk:
+                sips["bonk"] += n - ni
+                break
+
             if n >= 7:
                 sips["turn"] += 1
 
-        return x,y,d
+            player_steps.append((x,y,d))
+
+        return x,y,d, player_steps
     else:
-        for _ in "*"*n:
-            x,y = step_dir(x,y,d)
+        for ni in range(n):
+            nx,ny = step_dir(x,y,d)
+            if player_block(nx,ny):
+                sips["bonk"] += n - ni
+                d = lookup_in_map(x,y)[2]
+                break
+
+            x, y = nx, ny
             if lookup_in_map(x,y) is None:
                 sips["off_map"] += 1
                 break
-        return x,y,d
 
-def step_players(players):
-    new_players = []
-    for x,y,d,g in players:
-        ng = g + 1 if g < 3 else g
-        sips = {"turn": 0, "off_map": 0, "gas": 0}
-        steps = []
-        for i in range(ng):
+            player_steps.append((x,y,d))
+
+        return x,y,d, player_steps
+
+def step_player(pl,x,y,d,g):
+    ng = g + 1 if (g < 2 if pl == 0 else g < 3) else g
+    sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0}
+    steps = []
+    for i in range(ng):
+        r = random.randint(1,6)
+        while r >= 5:
             r = random.randint(1,6)
-            while r >= 5:
-                r = random.randint(1,6)
-                sips["gas"] += 1
+            sips["gas"] += 1
 
-            steps.append(r)
+        steps.append(r)
+    if steps == [1,1,1]: # Destroy gear box
+        sips["gear_box"] += 1
+        ng = 0
+        ret_val = (x,y,d,ng)
+        player_steps = []
+    else:
+        px,py,pd,player_steps = step_dir_n(x, y, d, sum(steps), sips)
+        ret_val = (px, py, pd, ng if not sips["off_map"] else 0)
+    print (sips["turn"] + (sips["gas"]-2 if sips["gas"] > 2 else 0), sips, sum(steps), (pl,x,y))
+    return ret_val, player_steps
 
-        if sips["off_map"]:
-            2
+print ("simulate dice")
+sim_dice_res = {i: 0 for i in range(3,12+1)}
+for _ in range(10000):
+    dice = []
+    for _ in range(3):
+        r = random.randint(1,6)
+        while r >= 5:
+            r = random.randint(1,6)
+        dice.append(r)
+    sim_dice_res[sum(dice)] += 1
+print (sim_dice_res)
+print ({i: sim_dice_res[i] / sum(sim_dice_res[i] for i in sim_dice_res) for i in sim_dice_res})
 
-        new_players.append((*step_dir_n(x, y, d, sum(steps), sips), ng if sips["off_map"] else 0))
-        print ("sips", sips, sum(steps))
-    players[:] = new_players
+frames = []
+frames.append(save_map(f'Maps/000_map.png', game_map, players, (0, []), scale))
+for i in range(1,30):
+    for pl,(x,y,d,g) in enumerate(players):
+        players[pl], players_steps = step_player(pl,x,y,d,g)
+        filename = f'Maps/{i:03d}_{pl:02d}_a_map.png'
+        frames.append(save_map(filename, game_map, players, (pl, players_steps), scale))
+        filename = f'Maps/{i:03d}_{pl:02d}_b_map.png'
+        frames.append(save_map(filename, game_map, players, (pl, []), scale))
+    print("\nframe")
 
-for i in range(30):
-    filename = f'Maps/{i:03d}_map.png'
-    save_map(filename, game_map, players)
-    step_players(players)
+frames[0].save(f'Maps/map.gif', format='GIF', append_images=frames[1:], save_all=True, duration=120, loop=0)
