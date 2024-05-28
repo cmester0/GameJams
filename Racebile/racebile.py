@@ -19,8 +19,8 @@ def raw_hax_coord(x, y):
 
 def hex_coord(x,y,cx,cy,scale):
     xi,yi = raw_hax_coord(x,y)
-    xi = width // 2-cx + xi * scale
-    yi = height // 2-cy + yi * scale
+    xi = width // 2 + (xi-cx) * scale
+    yi = height // 2 + (yi-cy) * scale
     return xi, yi
 
 def draw_hex(m, xi, yi, scale, color):
@@ -233,27 +233,22 @@ def draw_map(m, game_map, players, player_steps, cx, cy, scale):
 
 game_map = gen_map()
 
-xm = list(map(lambda x: x[0], game_map))
-xi_max, xi_min = (max(xm), min(xm))
+raw_coords = [raw_hax_coord(xi, yi) for xi, yi, _ in game_map]
+xm = list(map(lambda x: x[0], raw_coords))
+x_max, x_min = (max(xm), min(xm))
 
-ym = list(map(lambda x: (x[0] + x[1] * 2), game_map))
-yi_max, yi_min = (max(ym), min(ym))
-
-x_max, y_max = raw_hax_coord(xi_max + 1, yi_max + 1)
-x_min, y_min = raw_hax_coord(xi_min - 1, yi_min - 1)
+ym = list(map(lambda x: x[1], raw_coords))
+y_max, y_min = (max(ym), min(ym))
 
 cx = (x_max + x_min) // 2
 cy = (y_max + y_min) // 2
-scale = min(int(1.5 * width / (x_max - x_min)), int(1.5 * height / (y_max - y_min)))
+
+scale = int(min(width / 2 / (x_max+2-cx), height / 2 / (y_max+2-cy)))
 
 players = list(map(lambda x: (*x,0), starting_platform())) # (-1,1,1,0), (-1,0,1,0), (0,-1,1,0)]
 
 def save_map(filename, game_map, players, player_steps, scale):
     m = [[(0, 0, 0) for j in range(height)] for i in range(width)]
-
-    draw_filled_hex(m, xi_max-1, yi_max-1, scale, (255,255,100))
-    draw_filled_hex(m, xi_min+1, yi_min+1, scale, (255,255,100))
-
     draw_map(m, game_map, players, player_steps, cx, cy, scale)
 
     flat_m = [m[i][j] for j in reversed(range(height)) for i in range(width)]
@@ -275,6 +270,10 @@ def player_block(x,y):
     l = list(filter(lambda v: v[0] == x and v[1] == y, players))
     return len(l) >= 2
 
+def off_map(x,y):
+    l = list(filter(lambda v: v[0] == x and v[1] == y, game_map))
+    return len(l) == 0
+
 def step_dir_update_dir(x,y,d):
     nx, ny = step_dir(x,y,d)
     if player_block(nx,ny):
@@ -287,7 +286,7 @@ def step_dir_n(x,y,d,n, sips):
     player_steps = []
     player_steps.append((x,y,d))
 
-    if lookup_in_map(x,y) is None:
+    if off_map(x,y):
         x,y = step_dir(x,y,(d+3)%6)
         d = lookup_in_map(x,y)[2]
         player_steps.append((x,y,d))
@@ -315,7 +314,7 @@ def step_dir_n(x,y,d,n, sips):
                 break
 
             x, y = nx, ny
-            if lookup_in_map(x,y) is None:
+            if off_map(x,y):
                 sips["off_map"] += 1
                 break
 
@@ -347,7 +346,7 @@ def step_player(pl,x,y,d,g):
 
 print ("simulate dice")
 sim_dice_res = {i: 0 for i in range(3,12+1)}
-for _ in range(10000):
+for _ in range(100000):
     dice = []
     for _ in range(3):
         r = random.randint(1,6)
