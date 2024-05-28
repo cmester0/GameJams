@@ -7,8 +7,8 @@ from PIL import Image
 import heapq
 
 # Setup
-width = 1000
-height = 1000
+width = 1500
+height = 1500
 
 # Helper functions
 
@@ -113,57 +113,69 @@ def bfs(x0,y0,d0,x1,y1,d1,exclude=set()):
 
     return []
 
-def starting_platform():
-    return [(0,0,1),
-            (-1,0,0),
-            (0,-1,1),
-            (-1,-1,0),
-            (0,-2,1),
-            (-1,-2,0),
-            (0,-3,1),
-            (-1,-3,0)]
+def starting_platform(xi,yi):
+    return [(xi-0,yi+0,1),
+            (xi-1,yi+0,0),
+            (xi+0,yi-1,1),
+            (xi-1,yi-1,0),
+            (xi+0,yi-2,1),
+            (xi-1,yi-2,0),
+            (xi+0,yi-3,1),
+            (xi-1,yi-3,0)]
 
+import opensimplex
+import uuid
 def gen_map():
-    x,y,d = 0,0,1
-    l = starting_platform()
-    steps = [(x,y,d)]
+    seed_x = uuid.uuid1().int >> 64
+    seed_y = uuid.uuid1().int >> 64
 
-    count = 0
+    l = []
+    sz = 100000
+    osc = 0.3  # Circularity
+    dim = 30
 
-    total_steps = 4
+    opensimplex.seed(seed_x)
 
-    while len(steps) <= total_steps:
-        if len(steps) == total_steps:
-            nx, ny, nd = (0,-4,1)
+    x_old, y_old = None, None
+    for i in range(sz):
+        r = 40
+
+        ri = opensimplex.noise2(x=osc * cos(i / sz * 2 * pi), y=osc * sin(i / sz * 2 * pi))
+        r = 25+int((ri+1)/2*20)
+        x, y = (round(r * cos((i / sz) * 2 * pi)), round(r * sin((i / sz) * 2 * pi)))
+
+        if (x_old != x or y_old != y):
+            l.append((x,y)) # Zero is dummy val
+
+        x_old, y_old = x,y
+        print (i,"/",sz, x,y)
+
+    l_res = list(l)
+    l = []
+    for (x_old,y_old), (x,y) in zip(l_res, l_res[1:]):
+        for d in range(6):
+            if step_dir(x_old, y_old, d) == (x, y):
+                l.append((x_old,y_old,d)) # Zero is dummy val
+                break
         else:
-            nx = random.randint(-10,10)
-            ny = random.randint(-10,10)
-            nd = random.randint(0,5)
+            print ("fail direction")
+            l.append((x_old,y_old,0))
 
-        count += 1
-        if count > 4:
-            x,y,d = 0,0,1
-            l = starting_platform()
-            steps = [(x,y,d)]
-            count = 0
-            print ("backtrack")
-            continue
-
-        nl = bfs(x,y,d,nx,ny,nd,set(map(lambda x: (x[0], x[1]),l)))
-        if nl == []:
-            continue
-
-        steps += [(nx, ny, nd)]
-        l += nl
-        x,y,d = nx, ny, nd
-        count = 0
+    l = starting_platform(l[0][0], l[0][1]) + l
 
     return l
 
 def draw_map(m, game_map, players, player_steps, cx, cy, scale):
+    raw_coords = [(xi, yi) for xi, yi, _ in game_map]
+    xm = list(map(lambda x: x[0], raw_coords))
+    x_max, x_min = (max(xm), min(xm))
+
+    ym = list(map(lambda x: x[1], raw_coords))
+    y_max, y_min = (max(ym), min(ym))
+
     # Grid
-    for i in range(-40,40):
-        for j in range(-40,40):
+    for i in range(x_min-1, x_max+1+1):
+        for j in range(y_min-1, y_max+1+1):
             xi, yi = hex_coord(i, j, cx, cy, scale)
 
             if not (scale <= xi < width-scale and scale <= yi < width-scale):
@@ -233,19 +245,24 @@ def draw_map(m, game_map, players, player_steps, cx, cy, scale):
 
 game_map = gen_map()
 
-raw_coords = [raw_hax_coord(xi, yi) for xi, yi, _ in game_map]
-xm = list(map(lambda x: x[0], raw_coords))
-x_max, x_min = (max(xm), min(xm))
+def compute_scale_and_center():
+    raw_coords = [raw_hax_coord(xi, yi) for xi, yi, _ in game_map]
+    xm = list(map(lambda x: x[0], raw_coords))
+    x_max, x_min = (max(xm), min(xm))
 
-ym = list(map(lambda x: x[1], raw_coords))
-y_max, y_min = (max(ym), min(ym))
+    ym = list(map(lambda x: x[1], raw_coords))
+    y_max, y_min = (max(ym), min(ym))
 
-cx = (x_max + x_min) // 2
-cy = (y_max + y_min) // 2
+    cx = (x_max + x_min) // 2
+    cy = (y_max + y_min) // 2
 
-scale = int(min(width / 2 / (x_max+2-cx), height / 2 / (y_max+2-cy)))
+    scale = int(min(width / 2 / (x_max+2-cx), height / 2 / (y_max+2-cy)))
 
-players = list(map(lambda x: (*x,0), starting_platform())) # (-1,1,1,0), (-1,0,1,0), (0,-1,1,0)]
+    return scale, (cx, cy)
+
+scale, (cx, cy) = compute_scale_and_center()
+
+players = list(map(lambda x: (*x,0), starting_platform(game_map[0][0], game_map[0][1]))) # (-1,1,1,0), (-1,0,1,0), (0,-1,1,0)]
 
 def save_map(filename, game_map, players, player_steps, scale):
     m = [[(0, 0, 0) for j in range(height)] for i in range(width)]
