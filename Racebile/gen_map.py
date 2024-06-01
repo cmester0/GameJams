@@ -50,3 +50,32 @@ def starting_platform(xi,yi):
             (xi-1,yi-2,0),
             (xi+0,yi-3,1),
             (xi-1,yi-3,0)]
+
+def bfs(x0,y0,d0,x1,y1,d1,exclude=set()):
+    stk = [(0,x0,y0,d0,[])]
+    visited = set()
+    while len(stk) > 0:
+        s,x,y,d,r = heapq.heappop(stk)
+
+        if len(stk) > 0 and (x,y) in exclude or (x,y) in r:
+            continue
+
+        if not (-100 <= x <= 100 or -100 <= y <= 100):
+            continue
+
+        if not s < 40:
+            continue
+
+        if (x,y) == (x1,y1) and (d - d1)%6 == 0:
+            print ("success")
+            return r[:-1] + [(x1,y1,d1)]
+        if (x,y,d) in visited:
+            continue
+        visited.add((x,y,d))
+
+        nx, ny = step_dir(x,y,d)
+        heapq.heappush(stk,(s+1, nx, ny, (d+1)%6, r + [(nx, ny, (d+1)%6)]))
+        heapq.heappush(stk,(s+1, nx, ny, d, r + [(nx, ny, d)]))
+        heapq.heappush(stk,(s+1, nx, ny, (d-1)%6, r + [(nx, ny, (d-1)%6)]))
+
+    return []
