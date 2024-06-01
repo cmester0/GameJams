@@ -10,8 +10,8 @@ GifImagePlugin.LOADING_STRATEGY = GifImagePlugin.LoadingStrategy.RGB_AFTER_DIFFE
 import heapq
 
 # Setup
-width = 1500 # 1500
-height = 1500
+width = 1000 # 1500
+height = 1000
 
 # Helper functions
 
@@ -312,7 +312,7 @@ def step_player(pl,x,y,d,g,player_state,fell_off_map):
     else:
         ng = g + 1 if (g < 2 if pl == 0 else g < 3) else g
 
-    sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0, "start_last": 0, "end_first": 0, "halfway_cheer": 0, "goal_cheer": 0}
+    sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0, "start_last": 0, "end_first": 0, "halfway_cheer": 0, "goal_cheer": 0, "koblingsfejl": 0, "no_sips": 0}
     steps = []
     for i in range(ng):
         r = random.randint(1,6)
@@ -327,12 +327,12 @@ def step_player(pl,x,y,d,g,player_state,fell_off_map):
         ret_val = (x,y,d,ng,player_state)
         player_steps = []
     else:
+        sips["koblingsfejl"] = len(list(filter(lambda x: x == 1, steps)))
         px,py,pd,player_steps, player_state = step_dir_n(x, y, d, sum(steps), sips, player_state, fell_off_map[pl])
         ng = ng if not sips["off_map"] else 0
         ret_val = (px, py, pd, ng, player_state)
-    print (sips["turn"] + (sips["gas"]-2 if sips["gas"] > 2 else 0), sips, sum(steps), (pl,x,y))
     fell_off_map[pl] = sips["off_map"]
-    return ret_val, player_steps
+    return ret_val, player_steps, sips, steps
 
 def rtfm_map():
     # 0 standard, 1 start fields, 2 blue, 3 star, 4 choice direction, 5 forced dirs
@@ -404,7 +404,8 @@ def rtfm_map():
         (-6, 5): ([5],  [0]),
         (-5, 4): ([5],  [0]),
     }
-    start_line = []
+    start_line = [( 0, 0), ( 0, -1)]
+    mid_point = []
     players = [
         # Start Setup
         ( 0, 0, 5, 0, {(-5,10): 0}),
@@ -416,7 +417,7 @@ def rtfm_map():
         (-3, 3, 5, 0, {(-5,10): 0}),
         (-4, 3, 5, 0, {(-5,10): 0}),
     ]
-    return game_map, players
+    return game_map, players, start_line, mid_point
 
 def loop_map():
     # 0 standard, 1 start fields, 2 blue, 3 star, 4 choice direction, 5 forced dirs
@@ -622,7 +623,8 @@ def clover_map():
         (3,1): ([3], [0]),
         (2,1): ([3], [0]),
     }
-    start_line = []
+    start_line = [(0,1)]
+    mid_point = []
     players = [
         (0,1, 2, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
         (-1,1, 3, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
@@ -631,14 +633,14 @@ def clover_map():
         (1,-1, 0, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
         (1,0, 1, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
     ]
-    return game_map, players
+    return game_map, players, start_line, mid_point
 
 def bfs_distance(game_map, start_line):
     position_distance = {}
     stk = [(0,d,x,y) for x,y in start_line for d in game_map[(x,y)][0]]
     visited = set()
     while len(stk) > 0:
-        dist,d,x,y = stk.pop()
+        dist,d,x,y = heapq.heappop(stk)
 
         # if not (x,y) in game_map:
         #     print ("NEVER")
@@ -655,14 +657,14 @@ def bfs_distance(game_map, start_line):
         x,y = step_dir(x,y,d)
         dirs, t = game_map[(x,y)]
         for d in dirs:
-            stk.append((dist+1,d,x,y))
+            heapq.heappush(stk,(dist+1,d,x,y))
 
     assert (len(position_distance) == len(game_map))
     return position_distance
 
-# game_map, players = rtfm_map()
-game_map, players, start_line, mid_point = loop_map()
-# game_map, players = clover_map()
+game_map, players, start_line, mid_point = rtfm_map()
+# game_map, players, start_line, mid_point = loop_map()
+# game_map, players, start_line, mid_point = clover_map()
 
 position_distance = bfs_distance(game_map, start_line)
 
@@ -687,17 +689,33 @@ frames.append(save_map(f'Maps/000_map.png', game_map, players, (0, []), scale))
 
 fell_off_map = [False for p in players]
 
+drinking = [0 for p in players]
+moves = [0 for p in players]
+
 i = 0
-while (i < 15):
+while (i < 1500):
     i += 1
 
     print(f'\nframe {i:03d}.png')
     for pl,(x,y,d,g,player_state) in enumerate(players):
-        players[pl], players_steps = step_player(pl,x,y,d,g,player_state, fell_off_map)
+        players[pl], players_steps, sips, steps = step_player(pl,x,y,d,g,player_state, fell_off_map)
+        total_sips = sips["turn"] + (sips["gas"]-2 if sips["gas"] > 2 else 0) + 5.5 * sips["off_map"] + sips["bonk"] + 11 * sips["gear_box"] + sips["start_last"] + sips["end_first"] + sips["halfway_cheer"] + sips["goal_cheer"] + sips["koblingsfejl"]
+        if total_sips == 0:
+            sips["no_sip"] = 1
+            total_sips = 1
+
+        drinking[pl] += total_sips
+        moves[pl] += 1
+
         filename = f'Maps/{i:03d}_{pl:02d}_a_map.png'
         frames.append(save_map(filename, game_map, players, (pl, players_steps), scale))
         filename = f'Maps/{i:03d}_{pl:02d}_b_map.png'
         frames.append(save_map(filename, game_map, players, (pl, []), scale))
+
+
+print ("Average:", sum(drinking) / sum(moves))
+print ("Total:", sum(drinking))
+print ("Per player", drinking)
 
 frames[0].save(f'Maps/map.gif', append_images=frames[1:], save_all=True, duration=120, loop=0)
 # frames[0].save(f'Maps/map.gif', format='GIF', append_images=frames[1:], save_all=True, duration=120, loop=0)
