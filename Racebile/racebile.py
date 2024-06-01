@@ -8,8 +8,8 @@ from PIL import Image
 import heapq
 
 # Setup
-width = 800 # 1500
-height = 800
+width = 1000 # 1500
+height = 1000
 
 # Helper functions
 
@@ -127,7 +127,7 @@ def draw_circle(m, xi, yi, radius, color):
 
 
 def draw_map(m, game_map, players, player_steps, cx, cy, scale):
-    raw_coords = [(xi, yi) for xi, yi, _, _ in game_map]
+    raw_coords = [(xi, yi) for xi, yi in game_map]
     xm = list(map(lambda x: x[0], raw_coords))
     x_max, x_min = (max(xm), min(xm))
 
@@ -146,10 +146,12 @@ def draw_map(m, game_map, players, player_steps, cx, cy, scale):
             draw_hex(m, xi, yi, scale, color)
 
     # Map
-    for iters,(i,j,dirs,t) in enumerate(game_map):
+    for (i,j) in game_map:
+        dirs,t = game_map[(i,j)]
+
         xi, yi = hex_coord(i, j, cx, cy, scale)
 
-        if not (scale <= xi < width-scale and scale <= yi < width-scale):
+        if not (scale <= xi <= width-scale and scale <= yi <= height-scale):
             continue
 
         h = 210.6/360 if 2 in t else 51.1/360
@@ -179,7 +181,7 @@ def draw_map(m, game_map, players, player_steps, cx, cy, scale):
     for ps,(i,j,d) in enumerate(player_steps):
         xi, yi = hex_coord(i, j, cx, cy, scale)
 
-        if not (scale <= xi < width-scale and scale <= yi < width-scale):
+        if not (scale <= xi <= width-scale and scale <= yi <= width-scale):
             continue
 
         h = 5 * pl / 8 # len(players)
@@ -189,11 +191,11 @@ def draw_map(m, game_map, players, player_steps, cx, cy, scale):
 
         color = (int(r * 255), int(g * 255), int(b * 255))
 
-        draw_circle(m, xi, yi, scale // 2 + 2 * pl, color)
-        draw_circle(m, xi, yi, scale // 2 - 2 * pl, color)
+        draw_circle(m, xi, yi, scale // 3 + 2 * pl, color)
+        draw_circle(m, xi, yi, scale // 3 - 2 * pl, color)
 
-        draw_circle(m, xi, yi, scale // 2 + 2 * pl + 1, color)
-        draw_circle(m, xi, yi, scale // 2 - 2 * pl - 1, color)
+        draw_circle(m, xi, yi, scale // 3 + 2 * pl + 1, color)
+        draw_circle(m, xi, yi, scale // 3 - 2 * pl - 1, color)
 
         draw_hex_dir(m, xi, yi, d, scale, color)
 
@@ -201,7 +203,7 @@ def draw_map(m, game_map, players, player_steps, cx, cy, scale):
     for pl, (i,j,d,_,_) in enumerate(players):
         xi, yi = hex_coord(i, j, cx, cy, scale)
 
-        if not (scale <= xi < width-scale and scale <= yi < width-scale):
+        if not (scale <= xi <= width-scale and scale <= yi <= width-scale):
             continue
 
         h = 5 * pl / 8 # len(players)
@@ -211,22 +213,25 @@ def draw_map(m, game_map, players, player_steps, cx, cy, scale):
 
         color = (int(r * 255), int(g * 255), int(b * 255))
 
-        draw_circle(m, xi, yi, scale // 2 + 2 * pl, color)
-        draw_circle(m, xi, yi, scale // 2 - 2 * pl, color)
+        draw_circle(m, xi, yi, scale // 3 + 2 * pl, color)
+        draw_circle(m, xi, yi, scale // 3 - 2 * pl, color)
 
-        draw_circle(m, xi, yi, scale // 2 + 2 * pl + 1, color)
-        draw_circle(m, xi, yi, scale // 2 - 2 * pl - 1, color)
+        draw_circle(m, xi, yi, scale // 3 + 2 * pl + 1, color)
+        draw_circle(m, xi, yi, scale // 3 - 2 * pl - 1, color)
 
         draw_hex_dir(m, xi, yi, d, scale, color)
 
 
 def compute_scale_and_center():
-    raw_coords = [raw_hax_coord(xi, yi) for xi, yi, _, _ in game_map]
+    extra_x = 1
+    extra_y = 0
+    
+    raw_coords = [raw_hax_coord(xi, yi) for xi, yi in game_map]
     xm = list(map(lambda x: x[0], raw_coords))
-    x_max, x_min = (max(xm), min(xm))
+    x_max, x_min = (max(xm)+extra_x, min(xm))
 
     ym = list(map(lambda x: x[1], raw_coords))
-    y_max, y_min = (max(ym), min(ym))
+    y_max, y_min = (max(ym)+extra_y, min(ym))
 
     cx = (x_max + x_min) // 2
     cy = (y_max + y_min) // 2
@@ -248,33 +253,31 @@ def save_map(filename, game_map, players, player_steps, scale):
     return img
 
 def lookup_in_map(x,y):
-    l = list(filter(lambda v: v[0] == x and v[1] == y, game_map))
-    if len(l) == 0:
+    if not (x,y) in game_map:
         return None
     else:
-        return l[0]
+        return game_map[(x,y)]
 
 def player_block(x,y):
     l = list(filter(lambda v: v[0] == x and v[1] == y, players))
     cm = lookup_in_map(x,y)
-    return len(l) >= 2 or (not cm is None and 3 in cm[3] and len(l) >= 1)
+    return len(l) >= 2 or (not cm is None and 3 in cm[1] and len(l) >= 1)
 
 def off_map(x,y):
-    l = list(filter(lambda v: v[0] == x and v[1] == y, game_map))
-    return len(l) == 0
+    return not (x,y) in game_map
 
 def get_map_dirs(x, y, player_state, update=True):
     cm = lookup_in_map(x,y)
     if cm is None:
         d = None
-    elif 5 in cm[3]:
+    elif 5 in cm[1]:
         print ("player state", player_state, (x,y))
         print ("player state", player_state[(x,y)])
-        d = cm[2][player_state[(x,y)]]
+        d = cm[0][player_state[(x,y)]]
         if update:
             player_state[(x,y)] = 1 - player_state[(x,y)]
     else:
-        d = cm[2][0]
+        d = cm[0][0]
     return d, player_state
 
 def step_dir_update_dir(x,y,d, player_state):
@@ -329,7 +332,7 @@ def step_dir_n(x,y,d,n, sips, player_state):
         return x,y,d, player_steps, player_state
 
 def step_player(pl,x,y,d,g,player_state):
-    if not lookup_in_map(x,y) is None and 2 in lookup_in_map(x,y)[3]:
+    if not lookup_in_map(x,y) is None and 2 in lookup_in_map(x,y)[1]:
         ng = max(g-1,1)
     else:
         ng = g + 1 if (g < 2 if pl == 0 else g < 3) else g
@@ -357,89 +360,190 @@ def step_player(pl,x,y,d,g,player_state):
 
 def rtfm_map():
     # 0 standard, 1 start fields, 2 blue, 3 star, 4 choice direction, 5 forced dirs
-    game_map = [
+    game_map = {
         # Start Setup
-        ( 0, 0,[4,5],[1]),
-        (-1, 0,[0,5],[1]),
-        (-1, 1,[4,5],[1]),
-        (-2, 1,[0,5],[1]),
-        (-2, 2,[4,5],[1]),
-        (-3, 2,[0,5],[1]),
-        (-3, 3,[4,5],[1]),
-        (-4, 3,[0,5],[1]),
+        ( 0, 0): ([4,5],[1]),
+        (-1, 0): ([0,5],[1]),
+        (-1, 1): ([4,5],[1]),
+        (-2, 1): ([0,5],[1]),
+        (-2, 2): ([4,5],[1]),
+        (-3, 2): ([0,5],[1]),
+        (-3, 3): ([4,5],[1]),
+        (-4, 3): ([0,5],[1]),
 
         # Around map
-        ( 0,-1,[0],  [0]),
-        ( 1,-1,[5],  [0]),
-        ( 2,-2,[0],  [2]),
-        ( 3,-2,[0],  [0]),
-        ( 4,-2,[0],  [0]),
-        ( 5,-2,[1],  [0]),
-        ( 5,-1,[1],  [0]),
-        ( 5, 0,[0,2],[4]),
+        ( 0,-1): ([0],  [0]),
+        ( 1,-1): ([5],  [0]),
+        ( 2,-2): ([0],  [2]),
+        ( 3,-2): ([0],  [0]),
+        ( 4,-2): ([0],  [0]),
+        ( 5,-2): ([1],  [0]),
+        ( 5,-1): ([1],  [0]),
+        ( 5, 0): ([0,2],[4]),
 
         # split branch left
-        ( 6, 0,[1],  [0]),
-        ( 6, 1,[2],  [0]),
+        ( 6, 0): ([1],  [0]),
+        ( 6, 1): ([2],  [0]),
         # split branch right
-        ( 4, 1,[1],  [0]),
-        ( 4, 2,[0],  [0]),
+        ( 4, 1): ([1],  [0]),
+        ( 4, 2): ([0],  [0]),
 
         # Back to merge
-        ( 5, 2,[1],  [3]),
-        ( 5, 3,[1],  [0]),
-        ( 5, 4,[1],  [0]),
-        ( 5, 5,[2],  [0]),
-        ( 4, 6,[3],  [3]),
-        ( 3, 6,[2,3],[2]),
-        ( 2, 6,[2],  [2]),
-        ( 2, 7,[3],  [2]),
-        ( 1, 7,[3],  [0]),
-        ( 0, 7,[3,4],[0]),
-        ( 0, 6,[2,3],[2]),
-        (-1, 7,[3,4],[0]),
-        (-1, 6,[2],  [2]),
+        ( 5, 2): ([1],  [3]),
+        ( 5, 3): ([1],  [0]),
+        ( 5, 4): ([1],  [0]),
+        ( 5, 5): ([2],  [0]),
+        ( 4, 6): ([3],  [3]),
+        ( 3, 6): ([2,3],[2]),
+        ( 2, 6): ([2],  [2]),
+        ( 2, 7): ([3],  [2]),
+        ( 1, 7): ([3],  [0]),
+        ( 0, 7): ([3,4],[0]),
+        ( 0, 6): ([2,3],[2]),
+        (-1, 7): ([3,4],[0]),
+        (-1, 6): ([2],  [2]),
 
         # Midpoint
-        (-2, 7,[2],  [3]),
-        (-3, 8,[2],  [0]),
-        (-4, 9,[2],  [4]),
+        (-2, 7): ([2],  [3]),
+        (-3, 8): ([2],  [0]),
+        (-4, 9): ([2],  [4]),
 
-        (-5,10,[2,3],[5]), # Crossover point
+        (-5,10): ([2,3],[5]), # Crossover point
 
-        (-6,11,[2],  [3]),
-        (-7,12,[1],  [0]),
-        (-7,13,[0],  [2]),
-        (-6,13,[5],  [2]),
-        (-5,12,[4],  [2]),
-        (-5,11,[4],  [4]),
+        (-6,11): ([2],  [3]),
+        (-7,12): ([1],  [0]),
+        (-7,13): ([0],  [2]),
+        (-6,13): ([5],  [2]),
+        (-5,12): ([4],  [2]),
+        (-5,11): ([4],  [4]),
         # ( .. )          # Crossover point
-        (-6,10,[4],  [3]),
-        (-6, 9,[3],  [0]),
-        (-7, 9,[4],  [0]),
-        (-7, 8,[3,4],[0]),
-        (-8, 8,[4,5],[2]),
-        (-7, 7,[3,4],[0]),
-        (-8, 7,[5],  [2]),
-        (-7, 6,[5],  [3]),
-        (-6, 5,[5],  [0]),
-        (-5, 4,[5],  [0]),
-    ]
+        (-6,10): ([4],  [3]),
+        (-6, 9): ([3],  [0]),
+        (-7, 9): ([4],  [0]),
+        (-7, 8): ([3,4],[0]),
+        (-8, 8): ([4,5],[2]),
+        (-7, 7): ([3,4],[0]),
+        (-8, 7): ([5],  [2]),
+        (-7, 6): ([5],  [3]),
+        (-6, 5): ([5],  [0]),
+        (-5, 4): ([5],  [0]),
+    }
     start_line = []
     players = [
         # Start Setup
         ( 0, 0, 5, 0, {(-5,10): 0}),
         (-1, 0, 5, 0, {(-5,10): 0}),
-        # (-1, 1, 5, 0, {(-5,10): 0}),
-        # (-2, 1, 5, 0, {(-5,10): 0}),
-        # (-2, 2, 5, 0, {(-5,10): 0}),
-        # (-3, 2, 5, 0, {(-5,10): 0}),
-        # (-3, 3, 5, 0, {(-5,10): 0}),
-        # (-4, 3, 5, 0, {(-5,10): 0}),
+        (-1, 1, 5, 0, {(-5,10): 0}),
+        (-2, 1, 5, 0, {(-5,10): 0}),
+        (-2, 2, 5, 0, {(-5,10): 0}),
+        (-3, 2, 5, 0, {(-5,10): 0}),
+        (-3, 3, 5, 0, {(-5,10): 0}),
+        (-4, 3, 5, 0, {(-5,10): 0}),
     ]
     return game_map, players
 
-game_map, players = rtfm_map()
+def loop_map():
+    # 0 standard, 1 start fields, 2 blue, 3 star, 4 choice direction, 5 forced dirs
+    game_map = {
+        # Start Setup
+        ( 1,8): ([3,4],[1]),
+        ( 0,8): ([4,5],[1]),
+        ( 1,7): ([3,4],[1]),
+        ( 0,7): ([4,5],[1]),
+        ( 1,6): ([3,4],[1]),
+        ( 0,6): ([4,5],[1]),
+        ( 1,5): ([3,4],[1]),
+        ( 0,5): ([4,5],[1]),
+        ( 1,4): ([3,4],[1]),
+        ( 0,4): ([4,5],[1]),
+        ( 1,3): ([3,4],[1]),
+        ( 0,3): ([4,5],[1]),
+
+        # Map
+        (1, 2): ([4,5],[0]),
+        (0, 2): ([0,5],[0]),
+        (2, 1): ([0,5],[0]),
+        (1, 1): ([0,5],[0]),
+        (2, 0): ([0],[0]),
+        (3, 0): ([1],[0]),
+        (3, 1): ([0],[0]),
+        (4, 1): ([0,5],[0]),
+        (5, 1): ([5],[2]),
+        (5, 0): ([0],[0]),
+        (6, 0): ([0],[3]),
+        (7, 0): ([0],[0]),
+        (8, 0): ([0,1],[0]),
+        (9, 0): ([1],[0]),
+        (8, 1): ([0],[3]),
+        (9, 1): ([0],[0]),
+        (10, 1): ([0,2],[5,3]),
+        (11, 1): ([0],[0]),
+        (12, 1): ([1],[0]),
+        (12, 2): ([0,1],[4]),
+
+        # left way
+        (12, 3): ([1],[0]),
+        (12, 4): ([0],[0]),
+        (13, 4): ([5],[2]),
+        (14, 3): ([0],[3]),
+
+        # right way
+        (13, 2): ([5],[0]),
+        (14, 1): ([0],[3]),
+        (15, 1): ([1],[2]),
+        (15, 2): ([1],[0]),
+
+        # Combine
+        (15, 3): ([0],[0]),
+        (16, 3): ([5],[0]),
+        (17, 2): ([4],[0]),
+        (17, 1): ([4,5],[0]),
+        (18, 0): ([3,4],[0]),
+        (17, 0): ([4,5],[0]),
+        (18,-1): ([3,4],[0]),
+        (17,-1): ([4,5],[3]),
+        (18,-2): ([3,4],[2]),
+        (17,-2): ([4,5],[0]),
+        (18,-3): ([3,4],[0]),
+        (17,-3): ([5],[0]),
+        (18,-4): ([4],[0]),
+        (18,-5): ([4],[0]),
+        (18,-6): ([3,4],[0]),
+        (18,-7): ([2,3],[0]),
+        (17,-6): ([2,3],[2]),
+        (17,-7): ([2],[0]),
+        (16,-6): ([1,2],[0]),
+        (16,-5): ([2,3],[0]),
+        (15,-5): ([1],[0]),
+        (15,-4): ([2],[0]),
+        (14,-3): ([2],[3]),
+        (13,-2): ([2],[0]),
+        (12,-1): ([2],[0]),
+        (11, 0): ([2],[0]),
+        # (..)             # Crossover Point
+        ( 9, 2): ([2],[0]),
+        ( 8, 3): ([2],[0]),
+        ( 7, 4): ([2],[0]),
+        ( 6, 5): ([2],[3]),
+        ( 5, 6): ([2],[0]),
+        ( 4, 7): ([2],[0]),
+        ( 3, 8): ([2,3],[0]),
+        ( 2, 9): ([2,3],[2,3]),
+        ( 2, 8): ([3],[3]),
+        ( 1,10): ([3],[2]),
+        ( 1, 9): ([3,4],[0]),
+        ( 0,10): ([4],[2]),
+        ( 0,9): ([4,5],[0]),
+
+    }
+    start_line = []
+    players = [
+        # Start Setup
+    ]
+    return game_map, players
+
+
+game_map, players = loop_map()
 scale, (cx, cy) = compute_scale_and_center()
 
 
@@ -460,7 +564,7 @@ frames = []
 frames.append(save_map(f'Maps/000_map.png', game_map, players, (0, []), scale))
 
 i = 0
-while (i < 30):
+while (i < 3):
     i += 1
 
     for pl,(x,y,d,g,player_state) in enumerate(players):
@@ -471,4 +575,5 @@ while (i < 30):
         frames.append(save_map(filename, game_map, players, (pl, []), scale))
     print("\nframe")
 
-frames[0].save(f'Maps/map.gif', format='GIF', append_images=frames[1:], save_all=True, duration=120, loop=0)
+frames[0].save(f'Maps/map.gif', append_images=frames[1:], save_all=True, duration=120, loop=0)
+# frames[0].save(f'Maps/map.gif', format='GIF', append_images=frames[1:], save_all=True, duration=120, loop=0)
