@@ -79,3 +79,16 @@ def bfs(x0,y0,d0,x1,y1,d1,exclude=set()):
         heapq.heappush(stk,(s+1, nx, ny, (d-1)%6, r + [(nx, ny, (d-1)%6)]))
 
     return []
+
+print ("simulate dice")
+sim_dice_res = {i: 0 for i in range(3,12+1)}
+for _ in range(100000):
+    dice = []
+    for _ in range(3):
+        r = random.randint(1,6)
+        while r >= 5:
+            r = random.randint(1,6)
+        dice.append(r)
+    sim_dice_res[sum(dice)] += 1
+print (sim_dice_res)
+print ({i: sim_dice_res[i] / sum(sim_dice_res[i] for i in sim_dice_res) for i in sim_dice_res})

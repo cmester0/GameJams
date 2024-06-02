@@ -10,8 +10,8 @@ GifImagePlugin.LOADING_STRATEGY = GifImagePlugin.LoadingStrategy.RGB_AFTER_DIFFE
 import heapq
 
 # Setup
-width = 1000 # 1500
-height = 1000
+width = 1500 # 1500
+height = 1500
 
 # Helper functions
 
@@ -201,7 +201,7 @@ def compute_scale_and_center():
 
     raw_coords = [raw_hax_coord(xi, yi) for xi, yi in game_map]
     xm = list(map(lambda x: x[0], raw_coords))
-    x_max, x_min = (max(xm)+extra_x, min(xm))
+    x_max, x_min = (max(xm)+extra_x, min(xm)-extra_x)
 
     ym = list(map(lambda x: x[1], raw_coords))
     y_max, y_min = (max(ym)+extra_y, min(ym))
@@ -239,25 +239,36 @@ def player_block(x,y):
 def off_map(x,y):
     return not (x,y) in game_map
 
-def get_map_dirs(x, y, player_state, update=True):
+def get_map_dirs(x, y, player_state, update):
     cm = lookup_in_map(x,y)
     if cm is None:
         d = None
     elif 5 in cm[1]:
-        d = cm[0][player_state[(x,y)]]
         if update:
-            player_state[(x,y)] = 1 - player_state[(x,y)]
+            player_state[(x,y)] = (1 + player_state[(x,y)]) % len(cm[0])
+        d = cm[0][player_state[(x,y)]]
     else:
-        _, d = max((position_distance[step_dir(x,y,nd)], nd) for nd in cm[0])
+        # _, d = max((position_distance[step_dir(x,y,nd)], nd) for nd in cm[0])
+        _, d = max((len(game_map) + v if position_distance[(x,y)] > v else v, nd)
+                   for nd in cm[0]
+                   for nd2 in lookup_in_map(*step_dir(x,y,nd))[0]
+                   for nd3 in lookup_in_map(*step_dir(*step_dir(x,y,nd), nd2))[0]
+                   for v in [position_distance[step_dir(*step_dir(*step_dir(x,y,nd), nd2), nd3)]])
+        # d = cm[0][0]
     return d, player_state
 
-def step_dir_update_dir(x,y,d, player_state):
+def step_dir_update_dir(x,y,d, player_state,fell_off_map):
+    # if d is None:
+    #     return x,y,d,False,False,player_state
+
     nx, ny = step_dir(x,y,d)
     if player_block(nx,ny):
-        md, player_state = get_map_dirs(x, y, player_state)
+        md, player_state = get_map_dirs(x, y, player_state, update=False)
+        md = d if md is None else md
         return x,y, md, False, True, player_state
 
-    nd, player_state = get_map_dirs(nx, ny, player_state)
+    nd, player_state = get_map_dirs(nx, ny, player_state, update=True)
+    nd = d if nd is None else nd
     return nx, ny, nd, d == nd, False, player_state
 
 def step_dir_n(x,y,d,n, sips, player_state, fell_off_map):
@@ -270,8 +281,9 @@ def step_dir_n(x,y,d,n, sips, player_state, fell_off_map):
         player_steps.append((x,y,d))
 
     if n <= 9:
+        next_off_map = False
         for ni in range(n):
-            x,y,d,t,bonk,player_state = step_dir_update_dir(x,y,d,player_state)
+            x,y,d,t,bonk,player_state = step_dir_update_dir(x,y,d,player_state, fell_off_map)
 
             if bonk:
                 sips["bonk"] += n - ni
@@ -279,6 +291,13 @@ def step_dir_n(x,y,d,n, sips, player_state, fell_off_map):
 
             if n >= 7:
                 sips["turn"] += 1
+
+            if off_map(x,y) or next_off_map:
+                sips["off_map"] += 1
+                break
+
+            if not d in lookup_in_map(x,y)[0]:
+                next_off_map = True
 
             player_steps.append((x,y,d))
 
@@ -293,7 +312,7 @@ def step_dir_n(x,y,d,n, sips, player_state, fell_off_map):
                 break
 
             x, y = nx, ny
-            nd, player_state = get_map_dirs(x, y, player_state)
+            nd, player_state = get_map_dirs(x, y, player_state, True)
 
             if off_map(x,y) or next_off_map:
                 sips["off_map"] += 1
@@ -310,7 +329,7 @@ def step_player(pl,x,y,d,g,player_state,fell_off_map):
     if not lookup_in_map(x,y) is None and 2 in lookup_in_map(x,y)[1]:
         ng = max(g-1,1)
     else:
-        ng = g + 1 if (g < 2 if pl == 0 else g < 3) else g
+        ng = g + 1 if g < 3 else g # TODO: Strategy
 
     sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0, "start_last": 0, "end_first": 0, "halfway_cheer": 0, "goal_cheer": 0, "koblingsfejl": 0, "no_sips": 0}
     steps = []
@@ -453,7 +472,7 @@ def loop_map():
         (9, 0): ([1],[0]),
         (8, 1): ([0],[3]),
         (9, 1): ([0],[0]),
-        (10, 1): ([0,2],[5,3]),
+        (10, 1): ([2,0],[5,3]),
         (11, 1): ([0],[0]),
         (12, 1): ([1],[0]),
         (12, 2): ([1,0],[4]),
@@ -635,6 +654,166 @@ def clover_map():
     ]
     return game_map, players, start_line, mid_point
 
+def tight_clover_map():
+    # 0 standard, 1 start fields, 2 blue, 3 star, 4 choice direction, 5 forced dirs
+    game_map = {
+        ####################
+        # around (-2,4)
+        ( 0,-1): ([4,0,0], [5]), # ,3
+        (-1, 0): ([3,5,5], [5]), # ,3
+        (-1, 1): ([2,4,4], [5]), # ,3
+        ( 0, 1): ([1,3,3], [5]), # ,3
+        ( 1, 0): ([0,2,2], [5]), # ,3
+        ( 1,-1): ([5,1,1], [5]), # ,3
+
+        # around (-2,4)
+        (-2, 2): ([1,5], [5, 2]),
+        (-2, 3): ([0],   [1, 3]),
+        (-1, 3): ([5],   [1, 3]),
+        ( 0, 2): ([0,4], [5, 2]),
+
+        # around (-2,4)
+        (-2, 0): ([2,0], [5, 2]),
+        (-3, 1): ([1],   [1, 3]),
+        (-3, 2): ([0],   [1, 3]),
+
+        # around (-2,4)
+        (-1,-2): ([2],   [1, 3]),
+        (-2,-1): ([1],   [1, 3]),
+        ( 0,-2): ([3,1], [5, 2]),
+
+        # around (-2,4)
+        ( 1,-3): ([2],   [1, 3]),
+        ( 2,-2): ([2,4], [5, 2]),
+        ( 2,-3): ([3],   [1, 3]),
+
+        # around (-2,4)
+        ( 2, 0): ([3,5], [5, 2]),
+        ( 3,-1): ([4],   [1, 3]),
+        ( 3,-2): ([3],   [1, 3]),
+
+        # around (-2,4)
+        ( 1, 2): ([5],   [1, 3]),
+        ( 2, 1): ([4],   [1, 3]),
+    }
+    start_line = [(0,1)]
+    mid_point = []
+    players = [
+        (3,-2, 3, 0, {
+            ( 0,-1): 0-1,
+            (-1, 0): 0-1,
+            (-1, 1): 0-1,
+            ( 0, 1): 0-1,
+            ( 1, 0): 1-1,
+            ( 1,-1): 2-1,
+            (-2, 2): 0-1,
+            ( 0, 2): 0-1,
+            (-2, 0): 0-1,
+            ( 0,-2): 0-1,
+            ( 2,-2): 0-1,
+            ( 2, 0): 0-1,
+        }),
+        (3,-1, 4, 0, {
+            ( 0,-1): 0-1,
+            (-1, 0): 0-1,
+            (-1, 1): 0-1,
+            ( 0, 1): 0-1,
+            ( 1, 0): 1-1,
+            ( 1,-1): 2-1,
+            (-2, 2): 0-1,
+            ( 0, 2): 0-1,
+            (-2, 0): 0-1,
+            ( 0,-2): 0-1,
+            ( 2,-2): 0-1,
+            ( 2, 0): 0-1,
+        }),
+        (2,1, 4, 0, {
+            ( 0,-1): 0-1,
+            (-1, 0): 0-1,
+            (-1, 1): 0-1,
+            ( 0, 1): 1-1,
+            ( 1, 0): 1,
+            ( 1,-1): 0-1,
+            (-2, 2): 0-1,
+            ( 0, 2): 0,
+            (-2, 0): 0-1,
+            ( 0,-2): 0-1,
+            ( 2,-2): 0,
+            ( 2, 0): 0-1,
+        }),
+        (1,2, 5, 0, {
+            ( 0,-1): 0-1,
+            (-1, 0): 0-1,
+            (-1, 1): 0-1,
+            ( 0, 1): 1-1,
+            ( 1, 0): 1,
+            ( 1,-1): 0-1,
+            (-2, 2): 0-1,
+            ( 0, 2): 0,
+            (-2, 0): 0-1,
+            ( 0,-2): 0-1,
+            ( 2,-2): 0,
+            ( 2, 0): 0-1,
+        }),
+        (-1,3, 5, 0, {
+            ( 0,-1): 0-1,
+            (-1, 0): 0-1,
+            (-1, 1): 1-1,
+            ( 0, 1): 2-1,
+            ( 1, 0): 0-1,
+            ( 1,-1): 0-1,
+            (-2, 2): 1-1,
+            ( 0, 2): 1-1,
+            (-2, 0): 0-1,
+            ( 0,-2): 0-1,
+            ( 2,-2): 1-1,
+            ( 2, 0): 1-1,
+        }),
+        (-2,3, 0, 0, {
+            ( 0,-1): 0-1,
+            (-1, 0): 0-1,
+            (-1, 1): 1-1,
+            ( 0, 1): 2-1,
+            ( 1, 0): 0-1,
+            ( 1,-1): 0-1,
+            (-2, 2): 1-1,
+            ( 0, 2): 1-1,
+            (-2, 0): 0-1,
+            ( 0,-2): 0-1,
+            ( 2,-2): 1-1,
+            ( 2, 0): 1-1,
+        }),
+        (-3,2, 0, 0, {
+            ( 0,-1): 0-1,
+            (-1, 0): 1-1,
+            (-1, 1): 2-1,
+            ( 0, 1): 0-1,
+            ( 1, 0): 0-1,
+            ( 1,-1): 0-1,
+            (-2, 2): 1-1,
+            ( 0, 2): 0-1,
+            (-2, 0): 1-1,
+            ( 0,-2): 0-1,
+            ( 2,-2): 1-1,
+            ( 2, 0): 1-1,
+        }),
+        (-3,1, 1, 0, {
+            ( 0,-1): 0-1,
+            (-1, 0): 1-1,
+            (-1, 1): 2-1,
+            ( 0, 1): 0-1,
+            ( 1, 0): 0-1,
+            ( 1,-1): 0-1,
+            (-2, 2): 1-1,
+            ( 0, 2): 0-1,
+            (-2, 0): 1-1,
+            ( 0,-2): 0-1,
+            ( 2,-2): 1-1,
+            ( 2, 0): 1-1,
+        }),
+    ]
+    return game_map, players, start_line, mid_point
+
 def bfs_distance(game_map, start_line):
     position_distance = {}
     stk = [(0,d,x,y) for x,y in start_line for d in game_map[(x,y)][0]]
@@ -642,11 +821,7 @@ def bfs_distance(game_map, start_line):
     while len(stk) > 0:
         dist,d,x,y = heapq.heappop(stk)
 
-        # if not (x,y) in game_map:
-        #     print ("NEVER")
-        #     continue
-
-        if (d,x,y) in visited:
+        if (d,x,y) in visited and ((x,y) in position_distance and dist >= position_distance[(x,y)]):
             continue
         visited.add((d,x,y))
 
@@ -662,27 +837,14 @@ def bfs_distance(game_map, start_line):
     assert (len(position_distance) == len(game_map))
     return position_distance
 
-game_map, players, start_line, mid_point = rtfm_map()
-# game_map, players, start_line, mid_point = loop_map()
+# game_map, players, start_line, mid_point = rtfm_map()
+game_map, players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = clover_map()
+# game_map, players, start_line, mid_point = tight_clover_map()
 
 position_distance = bfs_distance(game_map, start_line)
 
 scale, (cx, cy) = compute_scale_and_center()
-
-
-print ("simulate dice")
-sim_dice_res = {i: 0 for i in range(3,12+1)}
-for _ in range(100000):
-    dice = []
-    for _ in range(3):
-        r = random.randint(1,6)
-        while r >= 5:
-            r = random.randint(1,6)
-        dice.append(r)
-    sim_dice_res[sum(dice)] += 1
-print (sim_dice_res)
-print ({i: sim_dice_res[i] / sum(sim_dice_res[i] for i in sim_dice_res) for i in sim_dice_res})
 
 frames = []
 frames.append(save_map(f'Maps/000_map.png', game_map, players, (0, []), scale))
@@ -693,7 +855,8 @@ drinking = [0 for p in players]
 moves = [0 for p in players]
 
 i = 0
-while (i < 1500):
+rounds = 30
+while (i < rounds):
     i += 1
 
     print(f'\nframe {i:03d}.png')
