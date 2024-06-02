@@ -403,7 +403,7 @@ def rtfm_map():
         (-3, 8): ([2],  [0]),
         (-4, 9): ([2],  [4]),
 
-        (-5,10): ([2,3],[5]), # Crossover point
+        (-5,10): ([3,2],[5]), # Crossover point
 
         (-6,11): ([2],  [3]),
         (-7,12): ([1],  [0]),
@@ -837,8 +837,8 @@ def bfs_distance(game_map, start_line):
     assert (len(position_distance) == len(game_map))
     return position_distance
 
-# game_map, players, start_line, mid_point = rtfm_map()
-game_map, players, start_line, mid_point = loop_map()
+game_map, players, start_line, mid_point = rtfm_map()
+# game_map, players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = clover_map()
 # game_map, players, start_line, mid_point = tight_clover_map()
 
@@ -855,7 +855,7 @@ drinking = [0 for p in players]
 moves = [0 for p in players]
 
 i = 0
-rounds = 30
+rounds = 30000
 while (i < rounds):
     i += 1
 
@@ -870,10 +870,10 @@ while (i < rounds):
         drinking[pl] += total_sips
         moves[pl] += 1
 
-        filename = f'Maps/{i:03d}_{pl:02d}_a_map.png'
-        frames.append(save_map(filename, game_map, players, (pl, players_steps), scale))
-        filename = f'Maps/{i:03d}_{pl:02d}_b_map.png'
-        frames.append(save_map(filename, game_map, players, (pl, []), scale))
+        # filename = f'Maps/{i:03d}_{pl:02d}_a_map.png'
+        # frames.append(save_map(filename, game_map, players, (pl, players_steps), scale))
+        # filename = f'Maps/{i:03d}_{pl:02d}_b_map.png'
+        # frames.append(save_map(filename, game_map, players, (pl, []), scale))
 
 
 print ("Average:", sum(drinking) / sum(moves))
