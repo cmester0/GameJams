@@ -99,7 +99,7 @@ def draw_circle(m, xi, yi, radius, color):
         m[round(xi + radius * cos(i / 360 * 2 * pi))][round(yi + radius * sin(i / 360 * 2 * pi))] = color
 
 
-def draw_map(m, game_map, players, player_steps, cx, cy, scale):
+def draw_map(m, game_map, players, player_steps, cx, cy, scale, fell_off_map):
     raw_coords = [(xi, yi) for xi, yi in game_map]
     xm = list(map(lambda x: x[0], raw_coords))
     x_max, x_min = (max(xm), min(xm))
@@ -194,6 +194,17 @@ def draw_map(m, game_map, players, player_steps, cx, cy, scale):
 
         draw_hex_dir(m, xi, yi, d, scale, color)
 
+    # Players
+    fell_off_total = max([fell_off_map[(x,y)] for x, y in fell_off_map] + [1])
+    for (x,y) in fell_off_map:
+        h = 0
+        s = 1
+        v = fell_off_map[(x,y)]/(fell_off_total)
+        r, g, b = colorsys.hsv_to_rgb(h,s,v)
+        color = (int(r * 255), int(g * 255), int(b * 255))
+        xi, yi = hex_coord(x, y, cx, cy, scale)
+        draw_filled_hex(m, xi, yi, scale // 2, color)
+
 
 def compute_scale_and_center():
     extra_x = 1
@@ -213,9 +224,9 @@ def compute_scale_and_center():
 
     return scale, (cx, cy)
 
-def save_map(filename, game_map, players, player_steps, scale):
+def save_map(filename, game_map, players, player_steps, scale, fell_off_map):
     m = [[(0, 0, 0) for j in range(height)] for i in range(width)]
-    draw_map(m, game_map, players, player_steps, cx, cy, scale)
+    draw_map(m, game_map, players, player_steps, cx, cy, scale, fell_off_map)
 
     flat_m = [m[i][j] for j in reversed(range(height)) for i in range(width)]
 
@@ -239,7 +250,7 @@ def player_block(x,y):
 def off_map(x,y):
     return not (x,y) in game_map
 
-def get_map_dirs(x, y, player_state, update):
+def get_map_dirs(x, y, cd, player_state, update):
     cm = lookup_in_map(x,y)
     if cm is None:
         d = None
@@ -253,7 +264,9 @@ def get_map_dirs(x, y, player_state, update):
                    for nd in cm[0]
                    for nd2 in lookup_in_map(*step_dir(x,y,nd))[0]
                    for nd3 in lookup_in_map(*step_dir(*step_dir(x,y,nd), nd2))[0]
-                   for v in [position_distance[step_dir(*step_dir(*step_dir(x,y,nd), nd2), nd3)]])
+                   for v in [position_distance[step_dir(*step_dir(*step_dir(x,y,nd), nd2), nd3)]]
+                   if (cd == -1 or (cd-nd)%6 in [5,0,1]) and (nd-nd2)%6 in [5,0,1] and (nd2-nd3)%6 in [5,0,1]
+                   )
         # d = cm[0][0]
     return d, player_state
 
@@ -263,11 +276,11 @@ def step_dir_update_dir(x,y,d, player_state,fell_off_map):
 
     nx, ny = step_dir(x,y,d)
     if player_block(nx,ny):
-        md, player_state = get_map_dirs(x, y, player_state, update=False)
+        md, player_state = get_map_dirs(x, y, d, player_state, update=False)
         md = d if md is None else md
         return x,y, md, False, True, player_state
 
-    nd, player_state = get_map_dirs(nx, ny, player_state, update=True)
+    nd, player_state = get_map_dirs(nx, ny, d, player_state, update=True)
     nd = d if nd is None else nd
     return nx, ny, nd, d == nd, False, player_state
 
@@ -277,7 +290,7 @@ def step_dir_n(x,y,d,n, sips, player_state, fell_off_map):
 
     if fell_off_map:
         x,y = step_dir(x,y,(d+3)%6)
-        d, player_state = get_map_dirs(x, y, player_state, False)
+        d, player_state = get_map_dirs(x, y, -1, player_state, False)
         player_steps.append((x,y,d))
 
     if n <= 9:
@@ -312,7 +325,7 @@ def step_dir_n(x,y,d,n, sips, player_state, fell_off_map):
                 break
 
             x, y = nx, ny
-            nd, player_state = get_map_dirs(x, y, player_state, True)
+            nd, player_state = get_map_dirs(x, y, -1, player_state, True)
 
             if off_map(x,y) or next_off_map:
                 sips["off_map"] += 1
@@ -558,7 +571,7 @@ def clover_map():
         (0,1): ([2], [1,3]),
 
         # Up to round
-        (-1,2): ([2,4], [5]),
+        (-1,2): ([4,2], [5]),
 
         # around (-2,4)
         (-2,3): ([2], [0]),
@@ -573,7 +586,7 @@ def clover_map():
         (-1,1): ([3], [1,3]),
 
         # Next round-about
-        (-2,1): ([3,5], [5]),
+        (-2,1): ([5,3], [5]),
 
         # around (-4, 2)
         (-3,1): ([3], [0]),
@@ -587,7 +600,7 @@ def clover_map():
         (-1,0): ([4], [1,3]),
 
         # Next round-about
-        (-1,-1): ([4,0], [5]),
+        (-1,-1): ([0,4], [5]),
 
         # around (-2,-2)
         (-1,-2): ([4], [0]),
@@ -602,7 +615,7 @@ def clover_map():
         (0,-1): ([5], [1,3]),
 
         # Next round-about
-        (1,-2): ([5,1], [5]),
+        (1,-2): ([1,5], [5]),
 
         # around (2,-4)
         (2,-3): ([5], [0]),
@@ -617,7 +630,7 @@ def clover_map():
         (1,-1): ([0], [1,3]),
 
         # Next round-about
-        (2,-1): ([0,2], [5]),
+        (2,-1): ([2,0], [5]),
 
         # around (4,-2)
         (3,-1): ([0], [0]),
@@ -632,7 +645,7 @@ def clover_map():
         (1,0): ([1], [1,3]),
 
         # Next round-about
-        (1,1): ([1,3], [5]),
+        (1,1): ([3,1], [5]),
 
         # around (2,2)
         (1,2): ([1], [0]),
@@ -814,6 +827,335 @@ def tight_clover_map():
     ]
     return game_map, players, start_line, mid_point
 
+def pod_racing_map():
+    # 0 standard, 1 start fields, 2 blue, 3 star, 4 choice direction, 5 forced dirs, death wall
+    game_map = {
+        # Start
+        (29, 0): ([1,2], [1]),
+        (28, 0): ([0,1], [1]),
+        (29,-1): ([1,2], [1]),
+        (28,-1): ([0,1], [1]),
+        (29,-2): ([1,2], [1]),
+        (28,-2): ([0,1], [1]),
+        (29,-3): ([1,2], [1]),
+        (28,-3): ([0,1], [1]),
+        (29,-4): ([1,2], [1]),
+
+        # Map start
+        (29, 1): ([2], [0]),
+        (28, 1): ([1,2], [0]),
+        (28, 2): ([2,3], [0]),
+        (27, 2): ([1,2], [0]),
+        (27, 3): ([2,3], [0]),
+        (26, 3): ([1,2,3], [0]),
+        (26, 4): ([2,3], [0]),
+        (25, 4): ([1,2], [0]),
+        (25, 5): ([2,3], [0]),
+        (24, 5): ([1,2], [0]),
+        (24, 6): ([2,3], [0]),
+        (23, 6): ([1,3], [0]),
+        (23, 7): ([1], [0]),
+
+        # Path up
+        (23, 8): ([2], [0]),
+        (22, 9): ([3], [0]),
+        (21, 9): ([3], [0]),
+        (20, 9): ([4], [0]),
+        (20, 8): ([3,4], [0]),
+
+        # Path down (and blocade)
+        (25, 3): ([3,4], [0]),
+        (25, 2): ([4], [0]),
+        (25, 1): ([3], [0]),
+
+        (24, 3): ([2,3], [0]),
+        (24, 1): ([2], [0]),
+
+        (23, 4): ([2], [0]),
+        (23, 3): ([1,4], [0]),
+        (23, 2): ([1,3], [0]),
+
+        (22, 6): ([4], [0]), # 0
+        (22, 5): ([3], [0]), # 1
+        (22, 2): ([2], [0]),
+
+        (21, 5): ([2], [0]),
+        (21, 4): ([1], [0]),
+        (21, 3): ([1], [0]),
+
+        # (24, 4): ([], [2]), # Should be wall around
+        # (24, 2): ([], [2]), # Should be wall around
+        # (23, 5): ([], [2]), # Should be wall around
+        # (22, 4): ([], [2]), # Should be wall around
+        # (22, 3): ([], [2]), # Should be wall around
+        # (21, 6): ([], [2]), # Should be wall around
+        # (20, 5): ([], [2]), # Should be wall around
+
+        # Open area with holes
+        (20, 7): ([2,4], [0]),
+        (20, 6): ([1,3], [0]),
+
+        (19, 6): ([2,3], [0]),
+        (19, 8): ([2,3], [0]),
+
+        (18, 9): ([2,3], [0]),
+        (18, 8): ([2,3], [0]),
+        (18, 7): ([2], [0]),
+        (18, 6): ([3], [0]),
+        (18, 5): ([2], [0]), # ?? respawn?
+
+        (17, 10): ([2,3], [0]),
+        (17, 9): ([2], [0]),
+        (17, 8): ([3], [0]),
+        (17, 6): ([2], [0]),
+
+        (16, 11): ([3], [0]),
+        (16, 10): ([2,3], [0]),
+        (16, 8): ([3], [0]),
+        (16, 7): ([2], [0]),
+
+        (15, 11): ([2], [0]),
+        (15, 10): ([3], [0]),
+        (15, 8): ([2,3], [0]),
+
+        (14, 12): ([3], [0]),
+        (14, 10): ([2,4], [0]),
+        (14, 9): ([1,3], [0]),
+        (14, 8): ([2], [0]),
+
+        (13, 12): ([4], [0]),
+        (13, 11): ([3], [0]),
+        (13, 9): ([2], [0]),
+        
+        (12, 11): ([3], [0]),
+        (12, 10): ([2], [0]),
+
+        # Ramp
+        (11, 11): ([3], [0]),
+        (10, 11): ([3], [0]),
+        (9, 11): ([3,4], [0]),
+        (8, 11): ([3], [0]),
+        (7, 11): ([3], [0]),
+        (6, 11): ([3], [0]),
+        (5, 11): ([3], [0]),
+        (4, 11): ([3], [0]),
+
+        (3, 11): ([3,4], [0]),
+        (3, 10): ([3,4], [0]),
+        (3, 9): ([4,5], [0]),
+        (3, 8): ([0,5], [0]),
+
+        (2, 11): ([3,4], [0]),
+        (2, 10): ([4,5], [0]),
+        (2, 9): ([0,5], [0]),
+
+        (1, 11): ([4], [0]),
+        (1, 10): ([5], [0]),
+
+        (4, 8): ([4,5], [0]),
+        (4, 7): ([0], [0]),
+
+        (5, 7): ([5], [0]),
+        (6, 6): ([5], [0]),
+        (7, 5): ([4,5], [0]),
+
+        # Slow path
+        (9, 10): ([4], [0]),
+        (9, 9): ([3], [0]),
+        (8, 9): ([3], [0]),
+        (7, 9): ([4], [0]),
+        (7, 8): ([5], [0]),
+        (8, 7): ([0], [0]),
+        (9, 7): ([5], [0]),
+        (10, 6): ([5], [0]),
+        (11, 5): ([4], [0]),
+        (11, 4): ([3], [0]),
+
+        (10, 4): ([2,4], [0]),
+        (9, 5): ([3], [0]),
+        (8, 5): ([3,4], [0]),
+        (8, 4): ([3,4,5], [0]),
+        (9, 3): ([3,4], [0]),
+        (10, 3): ([3], [0]),
+
+        (7, 4): ([4,5], [0]),
+        (8, 3): ([3,4,5], [0]),
+        (9, 2): ([3,4], [0]),
+
+        (7, 3): ([4,5], [0]),
+        (8, 2): ([3,4,5], [0]),
+        (9, 1): ([3,4], [0]),
+
+        (7, 2): ([4,5], [0]),
+        (8, 1): ([3,4,5], [0]),
+        (9, 0): ([3,4], [0]),
+
+        (7, 1): ([4,5], [0]),
+        (8, 0): ([3,4,5], [0]),
+        (9,-1): ([3], [0]),
+
+        (7, 0): ([5], [0]),
+
+        (8,-1): ([4], [0]),
+
+        # Cave
+        (8,-2): ([4,5], [0]),
+        (8,-3): ([0,5], [0]),
+
+        (9,-3): ([4,5], [0]),
+        (9,-4): ([0,5], [0]),
+
+        (10,-4): ([0,4,5], [0]),
+        (10,-5): ([0,4,5], [0]),
+        (10,-6): ([0,5], [0]),
+
+        (11,-4): ([0,4,5], [0]),
+        (11,-5): ([0,1,4], [0]),
+        (11,-6): ([4,5], [0]),
+        (11,-7): ([0,5], [0]),
+
+        (12,-4): ([5], [0]),
+        (12,-5): ([0,5], [0]),
+        (12,-7): ([0,5], [0]),
+        (12,-8): ([0], [0]),
+
+        (13,-5): ([4,5], [0]),
+        (13,-6): ([0,4,5], [0]),
+        (13,-7): ([0,1,5], [0]),
+        (13,-8): ([0,1], [0]),
+
+        (14,-6): ([4,5], [0]),
+        (14,-7): ([0,5], [0]),
+        (14,-8): ([0,1], [0]),
+
+        (15,-7): ([0], [0]),
+        (15,-8): ([0,1], [0]),
+
+        (16,-6): ([0], [0]),
+        (16,-7): ([0,1], [0]),
+        (16,-8): ([1], [0]),
+
+        (17,-6): ([0], [0]),
+        (17,-7): ([0,1], [0]),
+
+        (18,-3): ([3], [0]),
+        (18,-4): ([2], [0]),
+        (18,-5): ([0,1], [0]),
+        (18,-6): ([0,1], [0]),
+        (18,-7): ([1], [0]),
+
+        (19,-4): ([2], [0]),
+        (19,-5): ([2,1], [0]),
+        (19,-6): ([2,1], [0]),
+
+        # Cave ends shots
+        (17,-3): ([2,3], [0]),
+        (16,-3): ([2], [0]),
+        (16,-2): ([1,2], [0]),
+        (15,-2): ([1], [0]),
+        
+        (16,-1): ([1,2], [0]),
+        (15,-1): ([0,1], [0]),
+
+        (16,0): ([0,1], [0]),
+        (15,0): ([0,1], [0]),
+
+        (16,1): ([0,5], [0]),
+        (15,1): ([0], [0]),
+
+        (17,0): ([0], [0]),
+        (17,1): ([0,5], [0]),
+
+        # End race
+        (18,0): ([0,1,5], [0]),
+        (18,1): ([0,5], [0]),
+
+        (19,-1): ([0,5], [0]),
+        (19,0): ([0,4,5], [0]),
+        (19,1): ([5], [0]),
+
+        (20,-2): ([0,5], [0]),
+        (20,-1): ([0,4,5], [0]),
+        (20,0): ([4,5], [0]),
+
+        (21,-3): ([0,5], [0]),
+        (21,-2): ([0,4,5], [0]),
+        (21,-1): ([4,5], [0]),
+
+        (22,-4): ([0,5], [0]),
+        (22,-3): ([0,4,5], [0]),
+        (22,-2): ([4,5], [0]),
+
+        (23,-5): ([0,5], [0]),
+        (23,-4): ([0,4,5], [0]),
+        (23,-3): ([4,5], [0]),
+
+        (24,-6): ([0,5], [0]),
+        (24,-5): ([0,4,5], [0]),
+        (24,-4): ([4,5], [0]),
+
+        (25,-7): ([0,5], [0]),
+        (25,-6): ([0,4,5], [0]),
+        (25,-5): ([4,5], [0]),
+
+        (26,-8): ([0,5], [0]),
+        (26,-7): ([0,4,5], [0]),
+        (26,-6): ([0,4,5], [0]),
+
+        (27,-9): ([0,5], [0]),
+        (27,-8): ([0,4,5], [0]),
+        (27,-7): ([0,1,4,5], [0]),
+
+        (28,-10): ([0], [0]),
+        (28,-9): ([0], [0]),
+        (28,-8): ([0,1,2], [0]),
+
+        (29,-10): ([1], [0]),
+        (29,-9): ([1,2], [0]),
+
+        (27,-6): ([0,1], [0]),
+        (28,-7): ([0,1,2], [0]),
+        (29,-8): ([1,2], [0]),
+
+        (27,-5): ([0,1], [0]),
+        (28,-6): ([0,1,2], [0]),
+        (29,-7): ([1,2], [0]),
+
+        (27,-4): ([0,1], [0]),
+        (28,-5): ([0,1,2], [0]),
+        (29,-6): ([1,2], [0]),
+
+        (27,-3): ([0,1], [0]),
+        (28,-4): ([0,1,2], [0]),
+        (29,-5): ([1,2], [0]),
+
+        (27,-2): ([0], [0]),
+    }
+    start_line = [(29, 0)]
+    mid_point = []
+    players = [
+        # (29, 0): ([1,2], [1]),
+        # (28, 0): ([0,1], [1]),
+        # (29,-1): ([1,2], [1]),
+        # (28,-1): ([0,1], [1]),
+        # (29,-2): ([1,2], [1]),
+        # (28,-2): ([0,1], [1]),
+        # (29,-3): ([1,2], [1]),
+        # (28,-3): ([0,1], [1]),
+        # (29,-4): ([1,2], [1]),
+
+        (29, 0, 1, 0, {}),
+        # (28, 0, 1, 0, {}),
+        # (29,-1, 1, 0, {}),
+        # (28,-1, 1, 0, {}),
+        # (29,-2, 1, 0, {}),
+        # (28,-2, 1, 0, {}),
+        # (29,-3, 1, 0, {}),
+        # (28,-3, 1, 0, {}),
+        # (29,-4, 1, 0, {}),
+    ]
+    return game_map, players, start_line, mid_point
+
 def bfs_distance(game_map, start_line):
     position_distance = {}
     stk = [(0,d,x,y) for x,y in start_line for d in game_map[(x,y)][0]]
@@ -834,22 +1176,24 @@ def bfs_distance(game_map, start_line):
         for d in dirs:
             heapq.heappush(stk,(dist+1,d,x,y))
 
-    assert (len(position_distance) == len(game_map))
+    # assert (len(position_distance) == len(game_map))
     return position_distance
 
-game_map, players, start_line, mid_point = rtfm_map()
-# game_map, players, start_line, mid_point = loop_map()
+# game_map, players, start_line, mid_point = rtfm_map()
+game_map, players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = clover_map()
 # game_map, players, start_line, mid_point = tight_clover_map()
+# game_map, players, start_line, mid_point = pod_racing_map()
 
 position_distance = bfs_distance(game_map, start_line)
 
 scale, (cx, cy) = compute_scale_and_center()
 
-frames = []
-frames.append(save_map(f'Maps/000_map.png', game_map, players, (0, []), scale))
-
 fell_off_map = [False for p in players]
+out_of_map_counter = {}
+
+frames = []
+frames.append(save_map(f'Maps/000_map.png', game_map, players, (0, []), scale, out_of_map_counter))
 
 drinking = [0 for p in players]
 moves = [0 for p in players]
@@ -862,6 +1206,11 @@ while (i < rounds):
     print(f'\nframe {i:03d}.png')
     for pl,(x,y,d,g,player_state) in enumerate(players):
         players[pl], players_steps, sips, steps = step_player(pl,x,y,d,g,player_state, fell_off_map)
+        if fell_off_map[pl]:
+            ox,oy = (players[pl][0],players[pl][1])
+            if not (ox,oy) in out_of_map_counter:
+                out_of_map_counter[(ox,oy)] = 0
+            out_of_map_counter[(ox,oy)] += 1
         total_sips = sips["turn"] + (sips["gas"]-2 if sips["gas"] > 2 else 0) + 5.5 * sips["off_map"] + sips["bonk"] + 11 * sips["gear_box"] + sips["start_last"] + sips["end_first"] + sips["halfway_cheer"] + sips["goal_cheer"] + sips["koblingsfejl"]
         if total_sips == 0:
             sips["no_sip"] = 1
@@ -870,11 +1219,17 @@ while (i < rounds):
         drinking[pl] += total_sips
         moves[pl] += 1
 
-        # filename = f'Maps/{i:03d}_{pl:02d}_a_map.png'
-        # frames.append(save_map(filename, game_map, players, (pl, players_steps), scale))
-        # filename = f'Maps/{i:03d}_{pl:02d}_b_map.png'
-        # frames.append(save_map(filename, game_map, players, (pl, []), scale))
+        # if i % 1000 == 0:
+        #     filename = f'Maps/{i:03d}_{pl:02d}_a_map.png'
+        #     frames.append(save_map(filename, game_map, players, (pl, players_steps), scale,out_of_map_counter))
+        #     filename = f'Maps/{i:03d}_{pl:02d}_b_map.png'
+        #     frames.append(save_map(filename, game_map, players, (pl, []), scale,out_of_map_counter))
+        #     print (out_of_map_counter)
 
+print (out_of_map_counter)
+
+filename = f'Maps/result_map.png'
+frames.append(save_map(filename, game_map, players, (pl, []), scale, out_of_map_counter))
 
 print ("Average:", sum(drinking) / sum(moves))
 print ("Total:", sum(drinking))
