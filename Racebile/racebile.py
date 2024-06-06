@@ -8,6 +8,9 @@ from PIL import GifImagePlugin
 GifImagePlugin.LOADING_STRATEGY = GifImagePlugin.LoadingStrategy.RGB_AFTER_DIFFERENT_PALETTE_ONLY
 
 import heapq
+import itertools
+import numpy as np
+from threading import Thread
 
 # Setup
 width = 1500 # 1500
@@ -98,8 +101,7 @@ def draw_circle(m, xi, yi, radius, color):
     for i in range(360):
         m[round(xi + radius * cos(i / 360 * 2 * pi))][round(yi + radius * sin(i / 360 * 2 * pi))] = color
 
-
-def draw_map(m, game_map, players, player_steps, cx, cy, scale, fell_off_map):
+def pre_draw(m, game_map, cx, cy, scale):
     raw_coords = [(xi, yi) for xi, yi in game_map]
     xm = list(map(lambda x: x[0], raw_coords))
     x_max, x_min = (max(xm), min(xm))
@@ -150,6 +152,9 @@ def draw_map(m, game_map, players, player_steps, cx, cy, scale, fell_off_map):
             else:
                 draw_hex_dir(m, xi, yi, d, scale, (255,255,255))
 
+def draw_map(m, players, player_steps, cx, cy, scale, fell_off_map):
+    # pre_draw(m,game_map, cx, cy, scale)
+    
     pl, player_steps = player_steps
     for ps,(i,j,d) in enumerate(player_steps):
         xi, yi = hex_coord(i, j, cx, cy, scale)
@@ -224,16 +229,21 @@ def compute_scale_and_center():
 
     return scale, (cx, cy)
 
-def save_map(filename, game_map, players, player_steps, scale, fell_off_map):
-    m = [[(0, 0, 0) for j in range(height)] for i in range(width)]
-    draw_map(m, game_map, players, player_steps, cx, cy, scale, fell_off_map)
+def save_map(m, filename, players, player_steps, scale, fell_off_map):
+    draw_map(m, players, player_steps, cx, cy, scale, fell_off_map)
 
-    flat_m = [m[i][j] for j in reversed(range(height)) for i in range(width)]
+    # flat_m = (itertools.chain.from_iterable(m)) # [m[i][j] for j in reversed(range(height)) for i in range(width)]
 
-    img = Image.new('RGB', (width, height)) # width, height
-    img.putdata(flat_m)
-    img.save(filename)
+    # img = Image.new('RGB', (width, height)) # width, height
+    # img.putdata(flat_m)
 
+    # arr = np.array(m,dtype=np.uint8)
+    img = Image.fromarray(m, "RGB")
+    img = img.rotate(90)
+
+    t = Thread(target=lambda i,f: i.save(f), args=[img, filename])
+    t.start()
+    
     return img
 
 def lookup_in_map(x,y):
@@ -267,6 +277,9 @@ def get_map_dirs(x, y, cd, player_state, update):
                    for v in [position_distance[step_dir(*step_dir(*step_dir(x,y,nd), nd2), nd3)]]
                    if (cd == -1 or (cd-nd)%6 in [5,0,1]) and (nd-nd2)%6 in [5,0,1] and (nd2-nd3)%6 in [5,0,1]
                    )
+
+        # TODO: Get optimal racing line here!
+
         # d = cm[0][0]
     return d, player_state
 
@@ -552,14 +565,14 @@ def loop_map():
         ( 1,3, 4, 0, {(10, 1): 0}),
         ( 0,4, 4, 0, {(10, 1): 0}),
         ( 1,4, 4, 0, {(10, 1): 0}),
-        ( 0,5, 4, 0, {(10, 1): 0}),
-        ( 1,5, 4, 0, {(10, 1): 0}),
-        ( 0,6, 4, 0, {(10, 1): 0}),
-        ( 1,6, 4, 0, {(10, 1): 0}),
-        ( 0,7, 4, 0, {(10, 1): 0}),
-        ( 1,7, 4, 0, {(10, 1): 0}),
-        ( 0,8, 4, 0, {(10, 1): 0}),
-        ( 1,8, 4, 0, {(10, 1): 0}),
+        # ( 0,5, 4, 0, {(10, 1): 0}),
+        # ( 1,5, 4, 0, {(10, 1): 0}),
+        # ( 0,6, 4, 0, {(10, 1): 0}),
+        # ( 1,6, 4, 0, {(10, 1): 0}),
+        # ( 0,7, 4, 0, {(10, 1): 0}),
+        # ( 1,7, 4, 0, {(10, 1): 0}),
+        # ( 0,8, 4, 0, {(10, 1): 0}),
+        # ( 1,8, 4, 0, {(10, 1): 0}),
     ]
     return game_map, players, start_line, mid_point
 
@@ -662,8 +675,8 @@ def clover_map():
         (-1,1, 3, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
         (-1,0, 4, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
         (0,-1, 5, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
-        (1,-1, 0, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
-        (1,0, 1, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
+        # (1,-1, 0, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
+        # (1,0, 1, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
     ]
     return game_map, players, start_line, mid_point
 
@@ -1134,19 +1147,9 @@ def pod_racing_map():
     start_line = [(29, 0)]
     mid_point = []
     players = [
-        # (29, 0): ([1,2], [1]),
-        # (28, 0): ([0,1], [1]),
-        # (29,-1): ([1,2], [1]),
-        # (28,-1): ([0,1], [1]),
-        # (29,-2): ([1,2], [1]),
-        # (28,-2): ([0,1], [1]),
-        # (29,-3): ([1,2], [1]),
-        # (28,-3): ([0,1], [1]),
-        # (29,-4): ([1,2], [1]),
-
         (29, 0, 1, 0, {}),
-        # (28, 0, 1, 0, {}),
-        # (29,-1, 1, 0, {}),
+        (28, 0, 1, 0, {}),
+        (29,-1, 1, 0, {}),
         # (28,-1, 1, 0, {}),
         # (29,-2, 1, 0, {}),
         # (28,-2, 1, 0, {}),
@@ -1193,13 +1196,18 @@ fell_off_map = [False for p in players]
 out_of_map_counter = {}
 
 frames = []
-frames.append(save_map(f'Maps/000_map.png', game_map, players, (0, []), scale, out_of_map_counter))
+m = [[(0, 0, 0) for j in range(width)] for i in range(height)]
+m = np.array(m,dtype=np.uint8)
+
+pre_draw(m,game_map, cx, cy, scale)
+frame = save_map(np.array(m,dtype=np.uint8), f'Maps/000_map.png', players, (0, []), scale, out_of_map_counter)
+frames.append(frame)
 
 drinking = [0 for p in players]
 moves = [0 for p in players]
 
 i = 0
-rounds = 30000
+rounds = 1000
 while (i < rounds):
     i += 1
 
@@ -1219,17 +1227,20 @@ while (i < rounds):
         drinking[pl] += total_sips
         moves[pl] += 1
 
-        # if i % 1000 == 0:
-        #     filename = f'Maps/{i:03d}_{pl:02d}_a_map.png'
-        #     frames.append(save_map(filename, game_map, players, (pl, players_steps), scale,out_of_map_counter))
-        #     filename = f'Maps/{i:03d}_{pl:02d}_b_map.png'
-        #     frames.append(save_map(filename, game_map, players, (pl, []), scale,out_of_map_counter))
-        #     print (out_of_map_counter)
+        if i % 1 == 0:
+            filename = f'Maps/{i:03d}_{pl:02d}_a_map.png'
+            frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, players_steps), scale,out_of_map_counter)
+            if i < 10: frames.append(frame)
+            filename = f'Maps/{i:03d}_{pl:02d}_b_map.png'
+            frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, []), scale,out_of_map_counter)
+            if i < 10: frames.append(frame)
+            print (out_of_map_counter)
 
 print (out_of_map_counter)
 
 filename = f'Maps/result_map.png'
-frames.append(save_map(filename, game_map, players, (pl, []), scale, out_of_map_counter))
+frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, []), scale, out_of_map_counter)
+frames.append(frame)
 
 print ("Average:", sum(drinking) / sum(moves))
 print ("Total:", sum(drinking))
