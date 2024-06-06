@@ -1207,13 +1207,16 @@ drinking = [0 for p in players]
 moves = [0 for p in players]
 
 i = 0
-rounds = 1000
+rounds = 3000
 while (i < rounds):
     i += 1
 
     print(f'\nframe {i:03d}.png')
     for pl,(x,y,d,g,player_state) in enumerate(players):
         players[pl], players_steps, sips, steps = step_player(pl,x,y,d,g,player_state, fell_off_map)
+
+        
+
         if fell_off_map[pl]:
             ox,oy = (players[pl][0],players[pl][1])
             if not (ox,oy) in out_of_map_counter:
@@ -1221,8 +1224,10 @@ while (i < rounds):
             out_of_map_counter[(ox,oy)] += 1
         total_sips = sips["turn"] + (sips["gas"]-2 if sips["gas"] > 2 else 0) + 5.5 * sips["off_map"] + sips["bonk"] + 11 * sips["gear_box"] + sips["start_last"] + sips["end_first"] + sips["halfway_cheer"] + sips["goal_cheer"] + sips["koblingsfejl"]
         if total_sips == 0:
-            sips["no_sip"] = 1
+            sips["no_sips"] = 1
             total_sips = 1
+
+        print (sips)
 
         drinking[pl] += total_sips
         moves[pl] += 1
@@ -1234,7 +1239,6 @@ while (i < rounds):
             filename = f'Maps/{i:03d}_{pl:02d}_b_map.png'
             frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, []), scale,out_of_map_counter)
             if i < 10: frames.append(frame)
-            print (out_of_map_counter)
 
 print (out_of_map_counter)
 
