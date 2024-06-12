@@ -1272,13 +1272,6 @@ def comes_from_rolls_good_movements(game_map):
                 for nx,ny,nd in comes_from[1][(cx,cy,cd)]:
                     comes_from[steps+1][(x,y,d)].add((nx,ny,nd))
 
-    for (x,y,d) in next_outside_map:
-        # Add next step to comes_from
-        cx, cy = step_dir(x,y,d)
-
-        for i in range(12):
-            comes_from[i][(x,y,d)].add((cx, cy, d))
-
     backtrack_positions = legal_positions.union(next_outside_map)
 
     valid_outside_map = set()
@@ -1298,36 +1291,30 @@ def comes_from_rolls_good_movements(game_map):
                 comes_from[i][(x,y,d)].add((cx,cy,d))
                 valid_outside_map.add((x,y,d))
 
+    valid_next_outside_map = set()
+    for (x,y,d) in next_outside_map:
+        # Add next step to comes_from
+        cx, cy = x,y
 
-    print ((0,3,4),12, comes_from[11][(0,3,4)])
-    print ((0,3,4),11, comes_from[11][(0,3,4)])
-    print ((0,3,4),10, comes_from[10][(0,3,4)])
-    print ((0,3,4), 9, comes_from[ 9][(0,3,4)])
-    print ((0,3,4), 8, comes_from[ 8][(0,3,4)])
-    print ((0,3,4), 7, comes_from[ 7][(0,3,4)])
-    print ((0,3,4), 6, comes_from[ 6][(0,3,4)])
-    print ((0,3,4), 5, comes_from[ 5][(0,3,4)])
-    print ((0,3,4), 4, comes_from[ 4][(0,3,4)])
-    print ((0,3,4), 3, comes_from[ 3][(0,3,4)])
-    print ((0,3,4), 2, comes_from[ 2][(0,3,4)])
-    print ((0,3,4), 1, comes_from[ 1][(0,3,4)])
-    print ((0,3,4), 0, comes_from[ 0][(0,3,4)])
-    exit()
+        # Check if you can take 10-12 steps backwards
+        for i in range(1,12+1):
+            cx, cy = step_dir(cx,cy,(d+3)%6)
+            if not (cx,cy,d) in legal_positions:
+                break
+            if i >= 10: # 10,11,12
+                comes_from[i][(x,y,d)].add((cx,cy,d))
+                valid_next_outside_map.add((x,y,d))
 
-# def optimal_racing_line_if_cheating(race_map): # If you can select the dice
-#     # dp_space = ( other player positions , current position , current gear )
+    for (x,y,d) in valid_next_outside_map:
+        # Add next step to comes_from
+        cx, cy = step_dir(x,y,d)
 
-#     # Goal: max(distance) or min(time to goal)
-#     rolls = []
-#     for g in range(1,3+1):
-#         rolls.append(range(g,g*4+1)) # Possible moves
+        for i in range(12+1):
+            comes_from[i][(x,y,d)].add((cx, cy, d))
+        valid_outside_map.add((x,y,d))
 
-#     dp = {}
-#     # For each position find valid steps
-#     while (rounds):
-#         dp[(x,y,g,)]
-#     space = {(x,y,g,)}
-
+    return valid_outside_map, valid_next_outside_map, legal_positions, comes_from
+    
 # game_map, players, start_line, mid_point = rtfm_map()
 game_map, players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = clover_map()
@@ -1336,7 +1323,8 @@ game_map, players, start_line, mid_point = loop_map()
 
 players = players[:4]
 
-comes_from_rolls_good_movements(game_map)
+valid_outside_map, valid_next_outside_map, legal_positions, comes_from = comes_from_rolls_good_movements(game_map)
+exit ()
 
 comes_from, position_distance = bfs_distance(game_map, start_line)
 
