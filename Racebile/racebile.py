@@ -178,7 +178,7 @@ def draw_map(m, players, player_steps, cx, cy, scale, fell_off_map):
         draw_hex_dir(m, xi, yi, d, scale, color)
 
     # Players
-    for pl, (i,j,d,_,_) in enumerate(players):
+    for pl, ((i,j),d,_,_,_) in enumerate(players):
         xi, yi = hex_coord(i, j, cx, cy, scale)
 
         if not (scale <= xi <= width-scale and scale <= yi <= width-scale):
@@ -269,14 +269,21 @@ def get_map_dirs(x, y, cd, player_state, update):
             player_state[(x,y)] = (1 + player_state[(x,y)]) % len(cm[0])
         d = cm[0][player_state[(x,y)]]
     else:
-        # _, d = max((position_distance[step_dir(x,y,nd)], nd) for nd in cm[0])
-        _, d = max((len(game_map) + v if position_distance[(x,y)] > v else v, nd)
-                   for nd in cm[0]
-                   for nd2 in lookup_in_map(*step_dir(x,y,nd))[0]
-                   for nd3 in lookup_in_map(*step_dir(*step_dir(x,y,nd), nd2))[0]
-                   for v in [position_distance[step_dir(*step_dir(*step_dir(x,y,nd), nd2), nd3)]]
-                   if (cd == -1 or (cd-nd)%6 in [5,0,1]) and (nd-nd2)%6 in [5,0,1] and (nd2-nd3)%6 in [5,0,1]
-                   )
+        if cd == -1:
+            pos = [(position_distance[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in position_distance]
+        else:
+            pos = [(position_distance[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in position_distance]
+        d = min(pos, key=lambda x:x[:2])[2]
+
+            # pos = [(position_distance[(x,y,(cd+i)%6)], (cd+i)%6) for i in [-1,0,1] if (*step_dir(x,y,cd),(cd+i)%6) in position_distance]
+            # print (pos)
+            # d = min(filter(lambda x: x[0] == 0, pos))[1] if max(pos)[0] != 0 and min(pos)[0] == 0 else min(pos)[1]
+
+        # print (min())
+        # _, d = min((position_distance[(*step_dir(x,y,nd),(nd+i)%6)], nd) for nd in cm[0] for i in [-1,0,1] if (*step_dir(x,y,nd),(nd+i)%6) in position_distance)
+        # _, d = min((len(game_map) + v if position_distance[(x,y,cd)] > v else v, nd)
+        #            for nd in cm[0]
+        #            )
 
         # TODO: Get optimal racing line here!
 
@@ -351,13 +358,22 @@ def step_dir_n(x,y,d,n, sips, player_state, fell_off_map):
 
         return x,y,d, player_steps, player_state
 
-def step_player(pl,x,y,d,g,player_state,fell_off_map):
+def get_position(x,y,d):
+    if (x,y,d) in position_distance:
+        return position_distance[(x,y,d)]
+    else:
+        ox, oy = step_dir(x,y,(d+3)%6)
+        return min((position_distance[(ox,oy,d)],d) for d in range(6) if (ox,oy,d) in position_distance)[1]
+
+def step_player(pl,player,fell_off_map):
+    (x,y),d,g,player_state,rounds = player
+
     if not lookup_in_map(x,y) is None and 2 in lookup_in_map(x,y)[1]:
         ng = max(g-1,1)
     else:
         ng = g + 1 if g < 3 else g # TODO: Strategy
 
-    sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0, "start_last": 0, "end_first": 0, "halfway_cheer": 0, "goal_cheer": 0, "koblingsfejl": 0, "no_sips": 0}
+    sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0, "start_last": 0, "end_first": 0, "halfway_cheer": 0, "goal_cheer": 0, "koblingsfejl": 0, "no_sips": 0} # 
     steps = []
     for i in range(ng):
         r = random.randint(1,6)
@@ -369,13 +385,15 @@ def step_player(pl,x,y,d,g,player_state,fell_off_map):
     if steps == [1,1,1]: # Destroy gear box
         sips["gear_box"] += 1
         ng = 0
-        ret_val = (x,y,d,ng,player_state)
+        ret_val = ((x,y),d,ng,player_state,rounds)
         player_steps = []
     else:
         sips["koblingsfejl"] = len(list(filter(lambda x: x == 1, steps)))
         px,py,pd,player_steps, player_state = step_dir_n(x, y, d, sum(steps), sips, player_state, fell_off_map[pl])
         ng = ng if not sips["off_map"] else 0
-        ret_val = (px, py, pd, ng, player_state)
+        nrounds = rounds + int(get_position(x,y,d) < get_position(px,py,pd))
+        print ("ROUND:", nrounds)
+        ret_val = ((px, py), pd, ng, player_state, nrounds)
     fell_off_map[pl] = sips["off_map"]
     return ret_val, player_steps, sips, steps
 
@@ -453,14 +471,14 @@ def rtfm_map():
     mid_point = []
     players = [
         # Start Setup
-        ( 0, 0, 5, 0, {(-5,10): 0}),
-        (-1, 0, 5, 0, {(-5,10): 0}),
-        (-1, 1, 5, 0, {(-5,10): 0}),
-        (-2, 1, 5, 0, {(-5,10): 0}),
-        (-2, 2, 5, 0, {(-5,10): 0}),
-        (-3, 2, 5, 0, {(-5,10): 0}),
-        (-3, 3, 5, 0, {(-5,10): 0}),
-        (-4, 3, 5, 0, {(-5,10): 0}),
+        (( 0, 0), 5, 0, {(-5,10): 0},0),
+        ((-1, 0), 5, 0, {(-5,10): 0},0),
+        ((-1, 1), 5, 0, {(-5,10): 0},0),
+        ((-2, 1), 5, 0, {(-5,10): 0},0),
+        ((-2, 2), 5, 0, {(-5,10): 0},0),
+        ((-3, 2), 5, 0, {(-5,10): 0},0),
+        ((-3, 3), 5, 0, {(-5,10): 0},0),
+        ((-4, 3), 5, 0, {(-5,10): 0},0),
     ]
     return game_map, players, start_line, mid_point
 
@@ -483,7 +501,7 @@ def loop_map():
 
         # Map
         (1, 2): ([4,5],[0]),
-        (0, 2): ([0,5],[0]),
+        (0, 2): ([5],[0]),
         (2, 1): ([0,5],[0]),
         (1, 1): ([0,5],[0]),
         (2, 0): ([0],[0]),
@@ -561,18 +579,18 @@ def loop_map():
     start_line = [(0,3), (1,3)]
     mid_point = [(17, 0), (18,-1)]
     players = [
-        ( 0,3, 4, 0, {(10, 1): 0}),
-        ( 1,3, 4, 0, {(10, 1): 0}),
-        ( 0,4, 4, 0, {(10, 1): 0}),
-        ( 1,4, 4, 0, {(10, 1): 0}),
-        # ( 0,5, 4, 0, {(10, 1): 0}),
-        # ( 1,5, 4, 0, {(10, 1): 0}),
-        # ( 0,6, 4, 0, {(10, 1): 0}),
-        # ( 1,6, 4, 0, {(10, 1): 0}),
-        # ( 0,7, 4, 0, {(10, 1): 0}),
-        # ( 1,7, 4, 0, {(10, 1): 0}),
-        # ( 0,8, 4, 0, {(10, 1): 0}),
-        # ( 1,8, 4, 0, {(10, 1): 0}),
+        ( (0,3), 4, 0, {(10, 1): 0}, 0),
+        ( (1,3), 4, 0, {(10, 1): 0}, 0),
+        ( (0,4), 4, 0, {(10, 1): 0}, 0),
+        ( (1,4), 4, 0, {(10, 1): 0}, 0),
+        ( (0,5), 4, 0, {(10, 1): 0}, 0),
+        ( (1,5), 4, 0, {(10, 1): 0}, 0),
+        ( (0,6), 4, 0, {(10, 1): 0}, 0),
+        ( (1,6), 4, 0, {(10, 1): 0}, 0),
+        ( (0,7), 4, 0, {(10, 1): 0}, 0),
+        ( (1,7), 4, 0, {(10, 1): 0}, 0),
+        ( (0,8), 4, 0, {(10, 1): 0}, 0),
+        ( (1,8), 4, 0, {(10, 1): 0}, 0),
     ]
     return game_map, players, start_line, mid_point
 
@@ -671,12 +689,12 @@ def clover_map():
     start_line = [(0,1)]
     mid_point = []
     players = [
-        (0,1, 2, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
-        (-1,1, 3, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
-        (-1,0, 4, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
-        (0,-1, 5, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
-        # (1,-1, 0, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
-        # (1,0, 1, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}),
+        ((0,1), 2, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}, 0),
+        ((-1,1), 3, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}, 0),
+        ((-1,0), 4, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}, 0),
+        ((0,-1), 5, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}, 0),
+        ((1,-1), 0, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}, 0),
+        ((1,0), 1, 0, {(-1,2): 0, (-2,1): 0, (-1,-1): 0, (1,-2): 0, (2,-1): 0, (1,1): 0}, 0),
     ]
     return game_map, players, start_line, mid_point
 
@@ -725,7 +743,7 @@ def tight_clover_map():
     start_line = [(0,1)]
     mid_point = []
     players = [
-        (3,-2, 3, 0, {
+        ((3,-2), 3, 0, {
             ( 0,-1): 0-1,
             (-1, 0): 0-1,
             (-1, 1): 0-1,
@@ -738,8 +756,8 @@ def tight_clover_map():
             ( 0,-2): 0-1,
             ( 2,-2): 0-1,
             ( 2, 0): 0-1,
-        }),
-        (3,-1, 4, 0, {
+        }, 0),
+        ((3,-1), 4, 0, {
             ( 0,-1): 0-1,
             (-1, 0): 0-1,
             (-1, 1): 0-1,
@@ -752,8 +770,8 @@ def tight_clover_map():
             ( 0,-2): 0-1,
             ( 2,-2): 0-1,
             ( 2, 0): 0-1,
-        }),
-        (2,1, 4, 0, {
+        }, 0),
+        ((2,1), 4, 0, {
             ( 0,-1): 0-1,
             (-1, 0): 0-1,
             (-1, 1): 0-1,
@@ -766,8 +784,8 @@ def tight_clover_map():
             ( 0,-2): 0-1,
             ( 2,-2): 0,
             ( 2, 0): 0-1,
-        }),
-        (1,2, 5, 0, {
+        }, 0),
+        ((1,2), 5, 0, {
             ( 0,-1): 0-1,
             (-1, 0): 0-1,
             (-1, 1): 0-1,
@@ -780,8 +798,8 @@ def tight_clover_map():
             ( 0,-2): 0-1,
             ( 2,-2): 0,
             ( 2, 0): 0-1,
-        }),
-        (-1,3, 5, 0, {
+        }, 0),
+        ((-1,3), 5, 0, {
             ( 0,-1): 0-1,
             (-1, 0): 0-1,
             (-1, 1): 1-1,
@@ -794,8 +812,8 @@ def tight_clover_map():
             ( 0,-2): 0-1,
             ( 2,-2): 1-1,
             ( 2, 0): 1-1,
-        }),
-        (-2,3, 0, 0, {
+        }, 0),
+        ((-2,3), 0, 0, {
             ( 0,-1): 0-1,
             (-1, 0): 0-1,
             (-1, 1): 1-1,
@@ -808,8 +826,8 @@ def tight_clover_map():
             ( 0,-2): 0-1,
             ( 2,-2): 1-1,
             ( 2, 0): 1-1,
-        }),
-        (-3,2, 0, 0, {
+        }, 0),
+        ((-3,2), 0, 0, {
             ( 0,-1): 0-1,
             (-1, 0): 1-1,
             (-1, 1): 2-1,
@@ -822,8 +840,8 @@ def tight_clover_map():
             ( 0,-2): 0-1,
             ( 2,-2): 1-1,
             ( 2, 0): 1-1,
-        }),
-        (-3,1, 1, 0, {
+        }, 0),
+        ((-3,1), 1, 0, {
             ( 0,-1): 0-1,
             (-1, 0): 1-1,
             (-1, 1): 2-1,
@@ -836,7 +854,7 @@ def tight_clover_map():
             ( 0,-2): 0-1,
             ( 2,-2): 1-1,
             ( 2, 0): 1-1,
-        }),
+        }, 0),
     ]
     return game_map, players, start_line, mid_point
 
@@ -1147,40 +1165,168 @@ def pod_racing_map():
     start_line = [(29, 0)]
     mid_point = []
     players = [
-        (29, 0, 1, 0, {}),
-        (28, 0, 1, 0, {}),
-        (29,-1, 1, 0, {}),
-        # (28,-1, 1, 0, {}),
-        # (29,-2, 1, 0, {}),
-        # (28,-2, 1, 0, {}),
-        # (29,-3, 1, 0, {}),
-        # (28,-3, 1, 0, {}),
-        # (29,-4, 1, 0, {}),
+        ((29, 0), 1, 0, {},0),
+        ((28, 0), 1, 0, {},0),
+        ((29,-1), 1, 0, {},0),
+        ((28,-1), 1, 0, {},0),
+        ((29,-2), 1, 0, {},0),
+        ((28,-2), 1, 0, {},0),
+        ((29,-3), 1, 0, {},0),
+        ((28,-3), 1, 0, {},0),
+        ((29,-4), 1, 0, {},0),
     ]
     return game_map, players, start_line, mid_point
 
+# Distance to goal:
 def bfs_distance(game_map, start_line):
+    comes_from = {}
+    for (x,y) in game_map:
+        dirs,t = game_map[(x,y)]
+        for d in dirs:
+            nx,ny = step_dir(x,y,d)
+            for nd in [(d-1)%6, d, (d+1)%6]:
+                if not nd in game_map[(nx,ny)][0]:
+                    continue
+
+                if not (nx,ny,nd) in comes_from:
+                    comes_from[(nx,ny,nd)] = set()
+
+                comes_from[(nx,ny,nd)].add((x,y,d))
+
     position_distance = {}
-    stk = [(0,d,x,y) for x,y in start_line for d in game_map[(x,y)][0]]
+    stk = [(0,x,y,d) for x,y in start_line for d in game_map[(x,y)][0]]
     visited = set()
     while len(stk) > 0:
-        dist,d,x,y = heapq.heappop(stk)
+        dist,x,y,d = heapq.heappop(stk)
 
-        if (d,x,y) in visited and ((x,y) in position_distance and dist >= position_distance[(x,y)]):
+        if (x,y,d) in visited and ((x,y,d) in position_distance and dist >= position_distance[(x,y,d)]):
             continue
-        visited.add((d,x,y))
+        visited.add((x,y,d))
+
+        if not (x,y,d) in comes_from: # Unreachable??
+            continue
 
         # TODO: handle forced directions!
-        if not (x,y) in position_distance or dist < position_distance[(x,y)]:
-            position_distance[(x,y)] = dist
+        if not (x,y,d) in position_distance or dist < position_distance[(x,y,d)]:
+            position_distance[(x,y,d)] = dist
 
-        x,y = step_dir(x,y,d)
-        dirs, t = game_map[(x,y)]
-        for d in dirs:
-            heapq.heappush(stk,(dist+1,d,x,y))
+        print ((x,y,d),position_distance[(x,y,d)])
+
+        assert (d in game_map[(x,y)][0])
+        # print ((x,y,d), comes_from[(x,y,d)], dist)
+
+        for nx,ny,nd in comes_from[(x,y,d)]:
+            heapq.heappush(stk,(dist+1,nx,ny,nd))
+
+    print (position_distance)
+    start = [(x,y,d) for x,y in start_line for d in game_map[(x,y)][0]]
 
     # assert (len(position_distance) == len(game_map))
-    return position_distance
+    return comes_from, position_distance
+
+def comes_from_rolls_good_movements(game_map):
+    legal_positions = set()
+    for (x,y) in game_map:
+        dirs,t = game_map[(x,y)]
+        for d in dirs:
+            legal_positions.add((x,y,d))
+
+    next_outside_map = set()
+    outside_map = set()
+    for (x,y,d) in legal_positions:
+        nx, ny = step_dir(x,y,d)
+        if not (nx,ny,d) in legal_positions:
+            if (nx,ny) in game_map:
+                next_outside_map.add((nx,ny,d))
+                nx, ny = step_dir(x,y,d)
+            outside_map.add((nx,ny,d))
+
+    positions = legal_positions.union(next_outside_map).union(outside_map)
+
+    comes_from = [
+        {(x,y,d): set([(x,y,d)]) for x,y,d in positions}
+    ] + [
+        {(x,y,d): set(         ) for x,y,d in positions}
+        for _ in range(12)
+    ]
+
+    # position (x,y,d) "comes_from" (nx,ny,nd) in n steps
+    # comes_from[i][(x,y,d)] = (nx,ny,nd)
+    # comes_from[i+a][(x,y,d)] = comes_from[i](comes_from[a](x,y,d))
+
+    # (x,y,d) steps_to (nx,ny,nd) in one step
+    # steps_to[(x,y,d)] = (nx,ny,nd)
+
+    # Take 1 valid step
+    for (x,y,d) in legal_positions: # 1
+        nx, ny = step_dir(x,y,d)
+        for nd in filter(lambda v: v in game_map[(nx,ny)][0] and (nx,ny,v) in legal_positions, [(d-1)%6,d,(d+1)%6]):
+            comes_from[1][(nx,ny,nd)].add((x,y,d))
+
+    # n valid step
+    for steps in range(1,9): # 2-9
+        # Where can come from in n steps?
+        for (x,y,d) in comes_from[steps]:
+            # Remove duplicates with DP!
+            for cx,cy,cd in comes_from[steps][(x,y,d)]:
+                for nx,ny,nd in comes_from[1][(cx,cy,cd)]:
+                    comes_from[steps+1][(x,y,d)].add((nx,ny,nd))
+
+    for (x,y,d) in next_outside_map:
+        # Add next step to comes_from
+        cx, cy = step_dir(x,y,d)
+
+        for i in range(12):
+            comes_from[i][(x,y,d)].add((cx, cy, d))
+
+    backtrack_positions = legal_positions.union(next_outside_map)
+
+    valid_outside_map = set()
+    for (x,y,d) in outside_map:
+        # Add next step to comes_from
+        cx, cy = step_dir(x,y,(d+3)%6)
+        if (not (cx,cy,d) in next_outside_map and
+            not (cx,cy,d) in legal_positions):
+            break
+
+        # Check if you can take 10-12 steps backwards
+        for i in range(2,12+1):
+            cx, cy = step_dir(cx,cy,(d+3)%6)
+            if not (cx,cy,d) in legal_positions:
+                break
+            if i >= 10: # 10,11,12
+                comes_from[i][(x,y,d)].add((cx,cy,d))
+                valid_outside_map.add((x,y,d))
+
+
+    print ((0,3,4),12, comes_from[11][(0,3,4)])
+    print ((0,3,4),11, comes_from[11][(0,3,4)])
+    print ((0,3,4),10, comes_from[10][(0,3,4)])
+    print ((0,3,4), 9, comes_from[ 9][(0,3,4)])
+    print ((0,3,4), 8, comes_from[ 8][(0,3,4)])
+    print ((0,3,4), 7, comes_from[ 7][(0,3,4)])
+    print ((0,3,4), 6, comes_from[ 6][(0,3,4)])
+    print ((0,3,4), 5, comes_from[ 5][(0,3,4)])
+    print ((0,3,4), 4, comes_from[ 4][(0,3,4)])
+    print ((0,3,4), 3, comes_from[ 3][(0,3,4)])
+    print ((0,3,4), 2, comes_from[ 2][(0,3,4)])
+    print ((0,3,4), 1, comes_from[ 1][(0,3,4)])
+    print ((0,3,4), 0, comes_from[ 0][(0,3,4)])
+    exit()
+
+# def optimal_racing_line_if_cheating(race_map): # If you can select the dice
+#     # dp_space = ( other player positions , current position , current gear )
+
+#     # Goal: max(distance) or min(time to goal)
+#     rolls = []
+#     for g in range(1,3+1):
+#         rolls.append(range(g,g*4+1)) # Possible moves
+
+#     dp = {}
+#     # For each position find valid steps
+#     while (rounds):
+#         dp[(x,y,g,)]
+#     space = {(x,y,g,)}
 
 # game_map, players, start_line, mid_point = rtfm_map()
 game_map, players, start_line, mid_point = loop_map()
@@ -1188,7 +1334,11 @@ game_map, players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = tight_clover_map()
 # game_map, players, start_line, mid_point = pod_racing_map()
 
-position_distance = bfs_distance(game_map, start_line)
+players = players[:4]
+
+comes_from_rolls_good_movements(game_map)
+
+comes_from, position_distance = bfs_distance(game_map, start_line)
 
 scale, (cx, cy) = compute_scale_and_center()
 
@@ -1206,19 +1356,17 @@ frames.append(frame)
 drinking = [0 for p in players]
 moves = [0 for p in players]
 
-i = 0
-rounds = 3000
-while (i < rounds):
-    i += 1
+iters = 0
+total_rounds = 40
+while (iters < total_rounds):
+    iters += 1
 
-    print(f'\nframe {i:03d}.png')
-    for pl,(x,y,d,g,player_state) in enumerate(players):
-        players[pl], players_steps, sips, steps = step_player(pl,x,y,d,g,player_state, fell_off_map)
-
-        
+    print(f'\nframe {iters:03d}.png')
+    for pl,((x,y),d,g,player_state,rounds) in enumerate(players):
+        players[pl], players_steps, sips, steps = step_player(pl,players[pl],fell_off_map)
 
         if fell_off_map[pl]:
-            ox,oy = (players[pl][0],players[pl][1])
+            ox,oy = players[pl][0]
             if not (ox,oy) in out_of_map_counter:
                 out_of_map_counter[(ox,oy)] = 0
             out_of_map_counter[(ox,oy)] += 1
@@ -1232,13 +1380,13 @@ while (i < rounds):
         drinking[pl] += total_sips
         moves[pl] += 1
 
-        if i % 1 == 0:
-            filename = f'Maps/{i:03d}_{pl:02d}_a_map.png'
+        if iters < 40:
+            filename = f'Maps/{iters:03d}_{pl:02d}_a_map.png'
             frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, players_steps), scale,out_of_map_counter)
-            if i < 10: frames.append(frame)
-            filename = f'Maps/{i:03d}_{pl:02d}_b_map.png'
+            if iters < 10: frames.append(frame)
+            filename = f'Maps/{iters:03d}_{pl:02d}_b_map.png'
             frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, []), scale,out_of_map_counter)
-            if i < 10: frames.append(frame)
+            if iters < 10: frames.append(frame)
 
 print (out_of_map_counter)
 
@@ -1252,3 +1400,8 @@ print ("Per player", drinking)
 
 frames[0].save(f'Maps/map.gif', append_images=frames[1:], save_all=True, duration=120, loop=0)
 # frames[0].save(f'Maps/map.gif', format='GIF', append_images=frames[1:], save_all=True, duration=120, loop=0)
+
+
+
+
+
