@@ -389,7 +389,8 @@ def step_player(pl,player,fell_off_map):
     else:
         sips["koblingsfejl"] = len(list(filter(lambda x: x == 1, steps)))
 
-        px,py,pd,player_steps, player_state = step_dir_n(x, y, d, sum(steps), sips, player_state, fell_off_map[pl])
+        player_steps = []
+        # px,py,pd,player_steps, player_state = step_dir_n(x, y, d, sum(steps), sips, player_state, fell_off_map[pl])
 
         if fell_off_map[pl]:
             x,y = step_dir(x,y,(d+3)%6)
@@ -399,18 +400,15 @@ def step_player(pl,player,fell_off_map):
         # Greedy
         lookahead = sum(steps)
         l = sorted(map(lambda x: (position_distance_goal[x] if x in position_distance_goal else inf,x), go_to[lookahead][(x,y,d)]))
-        print (comes_from[10][(18,-8,4)])
-        print (lookahead, (x,y,d), go_to[10][(x,y,d)])
-        print (lookahead, (x,y,d), go_to[11][(x,y,d)])
-        print (lookahead, (x,y,d), go_to[12][(x,y,d)])
 
-        # Exclude large things from list
+        # Strategy!
+        print ((x,y,d), l, lookahead, go_to[lookahead][(x,y,d)])
         from_to_new = list((((v + 1 + max(l)[0] if v < lookahead else v),o) for v,o in l) if len(l) > 0 and max(l)[0] - min(l)[0] > lookahead else l)
-
-        print (from_to_new)
-        racing_line = list(filter(lambda x: x[0] == min(from_to_new)[0], from_to_new)) # Strategy!
-        print (racing_line)
+        racing_line = list(filter(lambda x: x[0] == min(from_to_new)[0], from_to_new))
         px,py,pd = racing_line[0][1]
+        # End of strategy
+
+        sips["off_map"] = int(not ((px, py, pd) in legal_positions or (px, py, pd) in valid_next_outside_map))
 
         ng = ng if not sips["off_map"] else 0
         nrounds = rounds + int(get_position(x,y,d) < get_position(px,py,pd))
@@ -524,7 +522,7 @@ def loop_map():
         # Map
         (1, 2): ([4,5],[0]),
         (0, 2): ([5],[0]),
-        (2, 1): ([0,5],[0]),
+        (2, 1): ([0],[0]),
         (1, 1): ([0,5],[0]),
         (2, 0): ([0],[0]),
         (3, 0): ([1],[0]),
@@ -566,12 +564,12 @@ def loop_map():
         (17,-1): ([4,5],[3]),
         (18,-2): ([3,4],[2]),
         (17,-2): ([4,5],[0]),
-        (18,-3): ([3,4],[0]),
+        (18,-3): ([4],[0]),
         (17,-3): ([5],[0]),
         (18,-4): ([4],[0]),
         (18,-5): ([4],[0]),
         (18,-6): ([3,4],[0]),
-        (18,-7): ([2,3],[0]),
+        (18,-7): ([3],[0]),
         (17,-6): ([2,3],[2]),
         (17,-7): ([2],[0]),
         (16,-6): ([1,2],[0]),
@@ -1223,9 +1221,6 @@ def bfs_distance(game_map, start_line, comes_from, go_to):
         for nx,ny,nd in comes_from[1][(x,y,d)]:
             heapq.heappush(stk,(dist+1,nx,ny,nd))
 
-    
-
-            
     # start = [(x,y,d) for x,y in start_line for d in game_map[(x,y)][0]]
 
     print (set(iter(legal_positions)) - set(iter(position_distance)))
@@ -1281,6 +1276,18 @@ def comes_from_rolls_good_movements(game_map):
                 for nx,ny,nd in comes_from[1][(cx,cy,cd)]:
                     comes_from[steps+1][(x,y,d)].add((nx,ny,nd))
 
+    for (x,y,d) in legal_positions:
+        cx,cy = x,y
+        # Check if you can take 10-12 steps backwards
+        for i in range(1,12+1):
+            # Add next step to comes_from
+            cx, cy = step_dir(cx,cy,(d+3)%6)
+            if (not (cx,cy,d) in legal_positions):
+                break
+
+            for j in range(max(10,i),12+1):
+                comes_from[j][(x,y,d)].add((cx,cy,d))
+
     backtrack_positions = legal_positions.union(next_outside_map)
 
     valid_outside_map = set()
@@ -1291,6 +1298,10 @@ def comes_from_rolls_good_movements(game_map):
             not (cx,cy,d) in legal_positions):
             break
 
+        for j in range(10,12+1):
+            comes_from[j][(x,y,d)].add((cx,cy,d))
+            valid_outside_map.add((x,y,d))
+
         # Check if you can take 10-12 steps backwards
         for i in range(2,12+1):
             for j in range(max(10,i),12+1):
@@ -1300,10 +1311,7 @@ def comes_from_rolls_good_movements(game_map):
             cx, cy = step_dir(cx,cy,(d+3)%6)
             if not (cx,cy,d) in legal_positions:
                 break
-            # if i >= 10: # 10,11,12
-            #     comes_from[i][(x,y,d)].add((cx,cy,d))
-            #     valid_outside_map.add((x,y,d))
-    assert (valid_outside_map == outside_map)
+    # assert (valid_outside_map == outside_map)
 
     valid_next_outside_map = set()
     for (x,y,d) in next_outside_map:
@@ -1317,14 +1325,15 @@ def comes_from_rolls_good_movements(game_map):
                 break
             if i >= 10: # 10,11,12
                 comes_from[i][(x,y,d)].add((cx,cy,d))
-                valid_next_outside_map.add((x,y,d))
+                if (x,y,d) in next_outside_map:
+                    valid_next_outside_map.add((x,y,d))
 
     for (x,y,d) in valid_next_outside_map:
         # Add next step to comes_from
         cx, cy = step_dir(x,y,d)
 
-        for i in range(12+1):
-            comes_from[i][(x,y,d)].add((cx, cy, d))
+        for i in range(1,12+1):
+            comes_from[i][(cx,cy,d)].add((x,y,d))
         valid_outside_map.add((x,y,d))
 
     return valid_outside_map, valid_next_outside_map, legal_positions, comes_from
@@ -1378,11 +1387,26 @@ m = np.array(m,dtype=np.uint8)
 
 pre_draw(m,game_map, cx, cy, scale)
 
-for i,j,d in {(16, 3, 5)}:
-    xi, yi = hex_coord(i, j, cx, cy, scale)
-    for xj in range(-3,3+1):
-        for yj in range(-3,3+1):
-            draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
+# print ()
+# print (go_to[0][(1,10,2)])
+# print (go_to[1][(1,10,2)])
+# print (go_to[2][(1,10,2)])
+# print (go_to[3][(1,10,2)])
+# print (go_to[4][(1,10,2)])
+# print (go_to[5][(1,10,2)])
+# print (go_to[6][(1,10,2)])
+# print (go_to[7][(1,10,2)])
+# print (go_to[8][(1,10,2)])
+# print (go_to[9][(1,10,2)])
+# print (go_to[10][(1,10,2)])
+# print (go_to[11][(1,10,2)])
+# print (go_to[12][(1,10,2)])
+
+# for i,j,d in {(10,0,0)}:
+#     xi, yi = hex_coord(i, j, cx, cy, scale)
+#     for xj in range(-3,3+1):
+#         for yj in range(-3,3+1):
+#             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
 
 # for i,j,d in {(1,2,5)}:
 #     xi, yi = hex_coord(i, j, cx, cy, scale)
@@ -1403,7 +1427,7 @@ drinking = [0 for p in players]
 moves = [0 for p in players]
 
 iters = 0
-total_rounds = 40
+total_rounds = 40000
 while (iters < total_rounds):
     iters += 1
 
@@ -1426,7 +1450,7 @@ while (iters < total_rounds):
         drinking[pl] += total_sips
         moves[pl] += 1
 
-        if iters < 40:
+        if iters < 0:
             filename = f'Maps/{iters:03d}_{pl:02d}_a_map.png'
             frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, players_steps), scale,out_of_map_counter)
             if iters < 10: frames.append(frame)
@@ -1446,8 +1470,3 @@ print ("Per player", drinking)
 
 frames[0].save(f'Maps/map.gif', append_images=frames[1:], save_all=True, duration=120, loop=0)
 # frames[0].save(f'Maps/map.gif', format='GIF', append_images=frames[1:], save_all=True, duration=120, loop=0)
-
-
-
-
-
