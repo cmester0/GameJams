@@ -1,4 +1,4 @@
-from math import cos, sin, pi, floor, ceil
+from math import cos, sin, pi, floor, ceil, inf
 import colorsys
 
 import random
@@ -389,19 +389,28 @@ def step_player(pl,player,fell_off_map):
     else:
         sips["koblingsfejl"] = len(list(filter(lambda x: x == 1, steps)))
 
-
         px,py,pd,player_steps, player_state = step_dir_n(x, y, d, sum(steps), sips, player_state, fell_off_map[pl])
 
-        # # Greedy
-        # lookahead = sum(steps)
-        # l = sorted(map(lambda x: (position_distance_goal[x],x), filter(lambda x: x in position_distance_goal, go_to[lookahead][(x,y,d)])))
+        if fell_off_map[pl]:
+            x,y = step_dir(x,y,(d+3)%6)
+            d, player_state = get_map_dirs(x, y, -1, player_state, False)
+            player_steps.append((x,y,d))
 
-        # # Exclude large things from list
-        # from_to_new = list((((v + 1 + max(l)[0] if v < lookahead else v),o) for v,o in l) if len(l) > 0 and max(l)[0] - min(l)[0] > lookahead else l)
+        # Greedy
+        lookahead = sum(steps)
+        l = sorted(map(lambda x: (position_distance_goal[x] if x in position_distance_goal else inf,x), go_to[lookahead][(x,y,d)]))
+        print (comes_from[10][(18,-8,4)])
+        print (lookahead, (x,y,d), go_to[10][(x,y,d)])
+        print (lookahead, (x,y,d), go_to[11][(x,y,d)])
+        print (lookahead, (x,y,d), go_to[12][(x,y,d)])
 
-        # racing_line = list(filter(lambda x: x[0] == min(from_to_new)[0], from_to_new)) # Strategy!
-        # print (racing_line)
-        # px,py,pd = racing_line[0][1]
+        # Exclude large things from list
+        from_to_new = list((((v + 1 + max(l)[0] if v < lookahead else v),o) for v,o in l) if len(l) > 0 and max(l)[0] - min(l)[0] > lookahead else l)
+
+        print (from_to_new)
+        racing_line = list(filter(lambda x: x[0] == min(from_to_new)[0], from_to_new)) # Strategy!
+        print (racing_line)
+        px,py,pd = racing_line[0][1]
 
         ng = ng if not sips["off_map"] else 0
         nrounds = rounds + int(get_position(x,y,d) < get_position(px,py,pd))
@@ -566,7 +575,7 @@ def loop_map():
         (17,-6): ([2,3],[2]),
         (17,-7): ([2],[0]),
         (16,-6): ([1,2],[0]),
-        (16,-5): ([2,3],[0]),
+        (16,-5): ([2],[0]),
         (15,-5): ([1],[0]),
         (15,-4): ([2],[0]),
         (14,-3): ([2],[3]),
@@ -1234,13 +1243,16 @@ def comes_from_rolls_good_movements(game_map):
 
     next_outside_map = set()
     outside_map = set()
-    for (x,y,d) in legal_positions:
-        nx, ny = step_dir(x,y,d)
-        if not (nx,ny,d) in legal_positions:
-            if (nx,ny) in game_map:
-                next_outside_map.add((nx,ny,d))
-                nx, ny = step_dir(x,y,d)
-            outside_map.add((nx,ny,d))
+    for (x,y,d) in legal_positions: # Take up to 12 steps anywhere
+        nx,ny = x,y
+        for _ in range(12+1):
+            nx, ny = step_dir(nx,ny,d)
+            if not (nx,ny,d) in legal_positions:
+                if (nx,ny) in game_map:
+                    next_outside_map.add((nx,ny,d))
+                    nx, ny = step_dir(nx,ny,d)
+                outside_map.add((nx,ny,d))
+                break
 
     positions = legal_positions.union(next_outside_map).union(outside_map)
 
@@ -1281,12 +1293,17 @@ def comes_from_rolls_good_movements(game_map):
 
         # Check if you can take 10-12 steps backwards
         for i in range(2,12+1):
+            for j in range(max(10,i),12+1):
+                comes_from[j][(x,y,d)].add((cx,cy,d))
+                valid_outside_map.add((x,y,d))
+
             cx, cy = step_dir(cx,cy,(d+3)%6)
             if not (cx,cy,d) in legal_positions:
                 break
-            if i >= 10: # 10,11,12
-                comes_from[i][(x,y,d)].add((cx,cy,d))
-                valid_outside_map.add((x,y,d))
+            # if i >= 10: # 10,11,12
+            #     comes_from[i][(x,y,d)].add((cx,cy,d))
+            #     valid_outside_map.add((x,y,d))
+    assert (valid_outside_map == outside_map)
 
     valid_next_outside_map = set()
     for (x,y,d) in next_outside_map:
@@ -1361,11 +1378,11 @@ m = np.array(m,dtype=np.uint8)
 
 pre_draw(m,game_map, cx, cy, scale)
 
-# for i,j,d in {(1,4,4)}:
-#     xi, yi = hex_coord(i, j, cx, cy, scale)
-#     for xj in range(-3,3+1):
-#         for yj in range(-3,3+1):
-#             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
+for i,j,d in {(16, 3, 5)}:
+    xi, yi = hex_coord(i, j, cx, cy, scale)
+    for xj in range(-3,3+1):
+        for yj in range(-3,3+1):
+            draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
 
 # for i,j,d in {(1,2,5)}:
 #     xi, yi = hex_coord(i, j, cx, cy, scale)
