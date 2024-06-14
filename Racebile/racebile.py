@@ -12,6 +12,10 @@ import itertools
 import numpy as np
 from threading import Thread
 
+from scipy.stats import poisson
+from scipy.stats import geom
+from scipy.stats import binom
+
 # Setup
 width = 1500 # 1500
 height = 1500
@@ -373,14 +377,9 @@ def step_player(pl,player,fell_off_map):
         ng = g + 1 if g < 3 else g # TODO: Strategy
 
     sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0, "start_last": 0, "end_first": 0, "halfway_cheer": 0, "goal_cheer": 0, "koblingsfejl": 0, "no_sips": 0}
-    steps = []
-    for i in range(ng):
-        r = random.randint(1,6)
-        while r >= 5:
-            r = random.randint(1,6)
-            sips["gas"] += 1
+    steps = [random.randint(1,4) for i in range(ng)]
+    sips["gas"] = sum(geom.rvs(2/3,size=ng))-ng
 
-        steps.append(r)
     if steps == [1,1,1]: # Destroy gear box
         sips["gear_box"] += 1
         ng = 0
@@ -402,7 +401,7 @@ def step_player(pl,player,fell_off_map):
         l = sorted(map(lambda x: (position_distance_goal[x] if x in position_distance_goal else inf,x), go_to[lookahead][(x,y,d)]))
 
         # Strategy!
-        print ((x,y,d), l, lookahead, go_to[lookahead][(x,y,d)])
+        # print ((x,y,d), l, lookahead, go_to[lookahead][(x,y,d)])
         from_to_new = list((((v + 1 + max(l)[0] if v < lookahead else v),o) for v,o in l) if len(l) > 0 and max(l)[0] - min(l)[0] > lookahead else l)
         racing_line = list(filter(lambda x: x[0] == min(from_to_new)[0], from_to_new))
         px,py,pd = racing_line[0][1]
@@ -412,7 +411,7 @@ def step_player(pl,player,fell_off_map):
 
         ng = ng if not sips["off_map"] else 0
         nrounds = rounds + int(get_position(x,y,d) < get_position(px,py,pd))
-        print ("ROUND:", nrounds)
+        # print ("ROUND:", nrounds)
         ret_val = ((px, py), pd, ng, player_state, nrounds)
     fell_off_map[pl] = sips["off_map"]
     return ret_val, player_steps, sips, steps
@@ -1387,6 +1386,8 @@ m = np.array(m,dtype=np.uint8)
 
 pre_draw(m,game_map, cx, cy, scale)
 
+# from_to[()][(1,10,2)]
+
 # print ()
 # print (go_to[0][(1,10,2)])
 # print (go_to[1][(1,10,2)])
@@ -1401,6 +1402,38 @@ pre_draw(m,game_map, cx, cy, scale)
 # print (go_to[10][(1,10,2)])
 # print (go_to[11][(1,10,2)])
 # print (go_to[12][(1,10,2)])
+
+# Random game for dice:
+tng = 3
+
+total_steps_before = []
+total_gas_before = []
+for _ in range(10000):
+    gas = 0
+    steps = []
+    for i in range(tng):
+        r = random.randint(1,6)
+        while r >= 5:
+            r = random.randint(1,6)
+            gas += 1
+        steps.append(r)
+    total_steps_before.append(sum (steps))
+    total_gas_before.append(gas)
+
+total_steps_after = []
+total_gas_after = []
+for _ in range(10000):
+    total_steps_after.append( sum([random.randint(1,4) for i in range(tng)]) )
+    total_gas_after.append(sum(geom.rvs(2/3,size=tng))-tng)
+
+print ("BEFORE:", sum(total_steps_before), sum(total_gas_before))
+print ("After:", sum(total_steps_after), sum(total_gas_after))
+print (2.5 * 10000, 10000 / 2 * tng)
+print (sum([n * (1/3)**n for n in range(10)])) # n * (1/3)^n
+exit()
+
+print (total_gas_before[:10])
+print (total_gas_after[:10])
 
 # for i,j,d in {(10,0,0)}:
 #     xi, yi = hex_coord(i, j, cx, cy, scale)
@@ -1427,7 +1460,7 @@ drinking = [0 for p in players]
 moves = [0 for p in players]
 
 iters = 0
-total_rounds = 40000
+total_rounds = 40
 while (iters < total_rounds):
     iters += 1
 
@@ -1450,7 +1483,7 @@ while (iters < total_rounds):
         drinking[pl] += total_sips
         moves[pl] += 1
 
-        if iters < 0:
+        if iters < 40:
             filename = f'Maps/{iters:03d}_{pl:02d}_a_map.png'
             frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, players_steps), scale,out_of_map_counter)
             if iters < 10: frames.append(frame)
