@@ -270,14 +270,13 @@ def get_map_dirs(x, y, cd, player_state, update):
         d = cm[0][player_state[(x,y)]]
     else:
         if cd == -1:
-            pos = [(position_distance[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in position_distance]
+            pos1 = [(position_distance_goal[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in position_distance_goal]
+            pos2 = [(position_distance_midpoint[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in position_distance_midpoint]
         else:
-            pos = [(position_distance[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in position_distance]
-        d = min(pos, key=lambda x:x[:2])[2]
-
-            # pos = [(position_distance[(x,y,(cd+i)%6)], (cd+i)%6) for i in [-1,0,1] if (*step_dir(x,y,cd),(cd+i)%6) in position_distance]
-            # print (pos)
-            # d = min(filter(lambda x: x[0] == 0, pos))[1] if max(pos)[0] != 0 and min(pos)[0] == 0 else min(pos)[1]
+            pos1 = [(position_distance_goal[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in position_distance_goal]
+            pos2 = [(position_distance_midpoint[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in position_distance_midpoint]
+        # d = min(pos, key=lambda x:x[:2])[2]
+        d = min(pos2)[2] if min(pos1)[2] < 12 else min(pos1)[2]
 
         # print (min())
         # _, d = min((position_distance[(*step_dir(x,y,nd),(nd+i)%6)], nd) for nd in cm[0] for i in [-1,0,1] if (*step_dir(x,y,nd),(nd+i)%6) in position_distance)
@@ -359,11 +358,11 @@ def step_dir_n(x,y,d,n, sips, player_state, fell_off_map):
         return x,y,d, player_steps, player_state
 
 def get_position(x,y,d):
-    if (x,y,d) in position_distance:
-        return position_distance[(x,y,d)]
+    if (x,y,d) in position_distance_goal:
+        return position_distance_goal[(x,y,d)]
     else:
         ox, oy = step_dir(x,y,(d+3)%6)
-        return min((position_distance[(ox,oy,d)],d) for d in range(6) if (ox,oy,d) in position_distance)[1]
+        return min((position_distance_goal[(ox,oy,d)],d) for d in range(6) if (ox,oy,d) in position_distance_goal)[1]
 
 def step_player(pl,player,fell_off_map):
     (x,y),d,g,player_state,rounds = player
@@ -373,7 +372,7 @@ def step_player(pl,player,fell_off_map):
     else:
         ng = g + 1 if g < 3 else g # TODO: Strategy
 
-    sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0, "start_last": 0, "end_first": 0, "halfway_cheer": 0, "goal_cheer": 0, "koblingsfejl": 0, "no_sips": 0} # 
+    sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0, "start_last": 0, "end_first": 0, "halfway_cheer": 0, "goal_cheer": 0, "koblingsfejl": 0, "no_sips": 0}
     steps = []
     for i in range(ng):
         r = random.randint(1,6)
@@ -389,7 +388,21 @@ def step_player(pl,player,fell_off_map):
         player_steps = []
     else:
         sips["koblingsfejl"] = len(list(filter(lambda x: x == 1, steps)))
+
+
         px,py,pd,player_steps, player_state = step_dir_n(x, y, d, sum(steps), sips, player_state, fell_off_map[pl])
+
+        # # Greedy
+        # lookahead = sum(steps)
+        # l = sorted(map(lambda x: (position_distance_goal[x],x), filter(lambda x: x in position_distance_goal, go_to[lookahead][(x,y,d)])))
+
+        # # Exclude large things from list
+        # from_to_new = list((((v + 1 + max(l)[0] if v < lookahead else v),o) for v,o in l) if len(l) > 0 and max(l)[0] - min(l)[0] > lookahead else l)
+
+        # racing_line = list(filter(lambda x: x[0] == min(from_to_new)[0], from_to_new)) # Strategy!
+        # print (racing_line)
+        # px,py,pd = racing_line[0][1]
+
         ng = ng if not sips["off_map"] else 0
         nrounds = rounds + int(get_position(x,y,d) < get_position(px,py,pd))
         print ("ROUND:", nrounds)
@@ -1178,51 +1191,39 @@ def pod_racing_map():
     return game_map, players, start_line, mid_point
 
 # Distance to goal:
-def bfs_distance(game_map, start_line):
-    comes_from = {}
-    for (x,y) in game_map:
-        dirs,t = game_map[(x,y)]
-        for d in dirs:
-            nx,ny = step_dir(x,y,d)
-            for nd in [(d-1)%6, d, (d+1)%6]:
-                if not nd in game_map[(nx,ny)][0]:
-                    continue
-
-                if not (nx,ny,nd) in comes_from:
-                    comes_from[(nx,ny,nd)] = set()
-
-                comes_from[(nx,ny,nd)].add((x,y,d))
-
+def bfs_distance(game_map, start_line, comes_from, go_to):
     position_distance = {}
     stk = [(0,x,y,d) for x,y in start_line for d in game_map[(x,y)][0]]
-    visited = set()
+    # visited = set()
     while len(stk) > 0:
         dist,x,y,d = heapq.heappop(stk)
 
-        if (x,y,d) in visited and ((x,y,d) in position_distance and dist >= position_distance[(x,y,d)]):
+        if (x,y,d) in position_distance and dist >= position_distance[(x,y,d)]:
             continue
-        visited.add((x,y,d))
 
-        if not (x,y,d) in comes_from: # Unreachable??
+        if not (x,y,d) in comes_from[1]: # Unreachable??
             continue
 
         # TODO: handle forced directions!
         if not (x,y,d) in position_distance or dist < position_distance[(x,y,d)]:
             position_distance[(x,y,d)] = dist
 
-        print ((x,y,d),position_distance[(x,y,d)])
-
         assert (d in game_map[(x,y)][0])
         # print ((x,y,d), comes_from[(x,y,d)], dist)
 
-        for nx,ny,nd in comes_from[(x,y,d)]:
+        for nx,ny,nd in comes_from[1][(x,y,d)]:
             heapq.heappush(stk,(dist+1,nx,ny,nd))
 
-    print (position_distance)
-    start = [(x,y,d) for x,y in start_line for d in game_map[(x,y)][0]]
+    
 
-    # assert (len(position_distance) == len(game_map))
-    return comes_from, position_distance
+            
+    # start = [(x,y,d) for x,y in start_line for d in game_map[(x,y)][0]]
+
+    print (set(iter(legal_positions)) - set(iter(position_distance)))
+    print (len(legal_positions))
+    print (len(position_distance), len(comes_from[1]))
+    # assert (len(position_distance) == len(comes_from[1]))
+    return position_distance
 
 def comes_from_rolls_good_movements(game_map):
     legal_positions = set()
@@ -1249,10 +1250,6 @@ def comes_from_rolls_good_movements(game_map):
         {(x,y,d): set(         ) for x,y,d in positions}
         for _ in range(12)
     ]
-
-    # position (x,y,d) "comes_from" (nx,ny,nd) in n steps
-    # comes_from[i][(x,y,d)] = (nx,ny,nd)
-    # comes_from[i+a][(x,y,d)] = comes_from[i](comes_from[a](x,y,d))
 
     # (x,y,d) steps_to (nx,ny,nd) in one step
     # steps_to[(x,y,d)] = (nx,ny,nd)
@@ -1314,7 +1311,31 @@ def comes_from_rolls_good_movements(game_map):
         valid_outside_map.add((x,y,d))
 
     return valid_outside_map, valid_next_outside_map, legal_positions, comes_from
-    
+
+def compute_goto(comes_from, valid_next_outside_map, legal_positions):
+    positions = valid_next_outside_map.union(legal_positions)
+    go_to = [{(x,y,d): set() for (x,y,d) in positions} for i in range(12+1)]
+    for steps in range(12+1):
+        for (x,y,d) in comes_from[steps]:
+            for ox,oy,od in comes_from[steps][(x,y,d)]:
+                if (ox,oy,od) in go_to[steps]:
+                    go_to[steps][(ox,oy,od)].add((x,y,d))
+                else:
+                    print ((ox,oy,od)) # Why?? Off map?? Should be invalid??
+    return go_to
+
+
+# def racing_line(game_map, position_distance, ):
+#     lookahead = 2
+#     from_to = [((x,y,d),sorted(map(lambda x: (position_distance[x],x), filter(lambda x: x in position_distance, go_to[lookahead][(x,y,d)])))) for (x,y,d) in go_to[lookahead]]
+
+#     # Exclude large things from list
+#     from_to_new = [((x,y,d), list((((v + 1 + max(l)[0] if v < lookahead else v),o) for v,o in l) if len(l) > 0 and max(l)[0] - min(l)[0] > lookahead else l)) for (x,y,d),l in from_to]
+
+#     racing_line = {(x,y,d): list(filter(lambda x: x[0] == min(l)[0], l)) for (x,y,d), l in from_to_new}
+
+#     return go_to
+
 # game_map, players, start_line, mid_point = rtfm_map()
 game_map, players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = clover_map()
@@ -1324,9 +1345,10 @@ game_map, players, start_line, mid_point = loop_map()
 players = players[:4]
 
 valid_outside_map, valid_next_outside_map, legal_positions, comes_from = comes_from_rolls_good_movements(game_map)
-exit ()
-
-comes_from, position_distance = bfs_distance(game_map, start_line)
+go_to = compute_goto(comes_from, valid_next_outside_map, legal_positions)
+position_distance_goal     = bfs_distance(game_map, start_line, comes_from, go_to)
+position_distance_midpoint = bfs_distance(game_map,  mid_point, comes_from, go_to)
+# go_to = racing_line(game_map, comes_from, position_distance, valid_next_outside_map, legal_positions)
 
 scale, (cx, cy) = compute_scale_and_center()
 
@@ -1338,7 +1360,26 @@ m = [[(0, 0, 0) for j in range(width)] for i in range(height)]
 m = np.array(m,dtype=np.uint8)
 
 pre_draw(m,game_map, cx, cy, scale)
-frame = save_map(np.array(m,dtype=np.uint8), f'Maps/000_map.png', players, (0, []), scale, out_of_map_counter)
+
+# for i,j,d in {(1,4,4)}:
+#     xi, yi = hex_coord(i, j, cx, cy, scale)
+#     for xj in range(-3,3+1):
+#         for yj in range(-3,3+1):
+#             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
+
+# for i,j,d in {(1,2,5)}:
+#     xi, yi = hex_coord(i, j, cx, cy, scale)
+#     for xj in range(-3,3+1):
+#         for yj in range(-3,3+1):
+#             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (0,200,0))
+
+# for i,j,d in {(0,3,4),(1,2,4)}:
+#     xi, yi = hex_coord(i, j, cx, cy, scale)
+#     for xj in range(-3,3+1):
+#         for yj in range(-3,3+1):
+#             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (0,0,200))
+
+frame = save_map(np.array(m,dtype=np.uint8), f'Maps/000_map.png', [], (0, []), scale, out_of_map_counter) # players
 frames.append(frame)
 
 drinking = [0 for p in players]
