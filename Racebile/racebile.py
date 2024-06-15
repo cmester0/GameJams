@@ -368,8 +368,8 @@ def get_position(x,y,d):
         ox, oy = step_dir(x,y,(d+3)%6)
         return min((position_distance_goal[(ox,oy,d)],d) for d in range(6) if (ox,oy,d) in position_distance_goal)[1]
 
-def step_player(pl,player,fell_off_map):
-    (x,y),d,g,player_state,rounds = player
+def step_player(pl,players,fell_off_map):
+    (x,y),d,g,player_state,rounds = players[pl]
 
     if not lookup_in_map(x,y) is None and 2 in lookup_in_map(x,y)[1]:
         ng = max(g-1,1)
@@ -377,34 +377,57 @@ def step_player(pl,player,fell_off_map):
         ng = g + 1 if g < 3 else g # TODO: Strategy
 
     sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0, "start_last": 0, "end_first": 0, "halfway_cheer": 0, "goal_cheer": 0, "koblingsfejl": 0, "no_sips": 0}
+
     steps = [random.randint(1,4) for i in range(ng)]
     sips["gas"] = sum(geom.rvs(2/3,size=ng))-ng
+
+    player_steps = []
+
+    if fell_off_map[pl]:
+        x,y = step_dir(x,y,(d+3)%6)
+        d, player_state = get_map_dirs(x, y, -1, player_state, False)
+        player_steps.append((x,y,d))
+
+    sips["start_last"] = min((((r,position_distance_goal[(x,y,d)] if (x,y,d) in position_distance_goal else inf),pl) for pl,((x,y),d,_,_,r) in enumerate(players)), key=lambda x: x[0])[1] == pl
 
     if steps == [1,1,1]: # Destroy gear box
         sips["gear_box"] += 1
         ng = 0
         ret_val = ((x,y),d,ng,player_state,rounds)
-        player_steps = []
     else:
         sips["koblingsfejl"] = len(list(filter(lambda x: x == 1, steps)))
 
-        player_steps = []
         # px,py,pd,player_steps, player_state = step_dir_n(x, y, d, sum(steps), sips, player_state, fell_off_map[pl])
-
-        if fell_off_map[pl]:
-            x,y = step_dir(x,y,(d+3)%6)
-            d, player_state = get_map_dirs(x, y, -1, player_state, False)
-            player_steps.append((x,y,d))
 
         # Greedy
         lookahead = sum(steps)
-        l = sorted(map(lambda x: (position_distance_goal[x] if x in position_distance_goal else inf,x), go_to[lookahead][(x,y,d)]))
+        l = []
+        use_goal = True
+        for (nx,ny,nd) in go_to_paths[lookahead][(x,y,d)]:
+            # print ("paths", go_to_paths[lookahead][(x,y,d)][nx,ny,nd])
+            for p in go_to_paths[lookahead][(x,y,d)][nx,ny,nd]:
+                if (nx,ny,nd) in position_distance_goal:
+                    # print (position_distance_goal[(nx,ny,nd)])
+                    l.append(((position_distance_goal[(nx,ny,nd)], position_distance_midpoint[(nx,ny,nd)]), (nx,ny,nd), p))
+                    if position_distance_goal[(nx,ny,nd)] < 12:
+                        use_goal = False
+                else:
+                    l.append(((inf, inf), (nx,ny,nd), p)) # Todo: calculate actual distance when falling off!
+
+        l = sorted(map(lambda x: (x[0][0] if use_goal else x[0][1],x[1],x[2]), l))
 
         # Strategy!
-        # print ((x,y,d), l, lookahead, go_to[lookahead][(x,y,d)])
-        from_to_new = list((((v + 1 + max(l)[0] if v < lookahead else v),o) for v,o in l) if len(l) > 0 and max(l)[0] - min(l)[0] > lookahead else l)
-        racing_line = list(filter(lambda x: x[0] == min(from_to_new)[0], from_to_new))
+        # print ((x,y,d), l, lookahead, go_to[lookahead][(x,y,d)], go_to_paths[lookahead][(x,y,d)])
+        racing_line = list(filter(lambda x: x[0] == min(l)[0], l))
+        if (len(racing_line) <= 0):
+            print (str(((x,y,d), l, lookahead, go_to[lookahead][(x,y,d)], go_to_paths[lookahead][(x,y,d)])))
+            assert (len(racing_line) > 0)
+
+        print (racing_line, len(racing_line) > 0)
+        print (racing_line[0])
+        print ()
         px,py,pd = racing_line[0][1]
+        player_steps = player_steps + [*racing_line[0][2]]
         # End of strategy
 
         sips["off_map"] = int(not ((px, py, pd) in legal_positions or (px, py, pd) in valid_next_outside_map))
@@ -1235,6 +1258,7 @@ def comes_from_rolls_good_movements(game_map):
         for d in dirs:
             legal_positions.add((x,y,d))
 
+
     next_outside_map = set()
     outside_map = set()
     for (x,y,d) in legal_positions: # Take up to 12 steps anywhere
@@ -1257,8 +1281,8 @@ def comes_from_rolls_good_movements(game_map):
         for _ in range(12)
     ]
 
-    # (x,y,d) steps_to (nx,ny,nd) in one step
-    # steps_to[(x,y,d)] = (nx,ny,nd)
+    # # (x,y,d) steps_to (nx,ny,nd) in one step
+    # # steps_to[(x,y,d)] = (nx,ny,nd)
 
     # Take 1 valid step
     for (x,y,d) in legal_positions: # 1
@@ -1283,9 +1307,7 @@ def comes_from_rolls_good_movements(game_map):
             cx, cy = step_dir(cx,cy,(d+3)%6)
             if (not (cx,cy,d) in legal_positions):
                 break
-
-            for j in range(max(10,i),12+1):
-                comes_from[j][(x,y,d)].add((cx,cy,d))
+            comes_from[i][(x,y,d)].add((cx,cy,d))
 
     backtrack_positions = legal_positions.union(next_outside_map)
 
@@ -1297,23 +1319,30 @@ def comes_from_rolls_good_movements(game_map):
             not (cx,cy,d) in legal_positions):
             break
 
-        for j in range(10,12+1):
+        for j in range(max(10,i),12+1):
             comes_from[j][(x,y,d)].add((cx,cy,d))
             valid_outside_map.add((x,y,d))
 
         # Check if you can take 10-12 steps backwards
         for i in range(2,12+1):
+            cx, cy = step_dir(cx,cy,(d+3)%6)
+            if not (cx,cy,d) in legal_positions:
+                break
             for j in range(max(10,i),12+1):
                 comes_from[j][(x,y,d)].add((cx,cy,d))
                 valid_outside_map.add((x,y,d))
 
-            cx, cy = step_dir(cx,cy,(d+3)%6)
-            if not (cx,cy,d) in legal_positions:
-                break
+    assert ((10, 1, 2) in comes_from[10][(0,11,2)])
+    assert ((10, 1, 2) in comes_from[11][(0,11,2)])
+    assert ((10, 1, 2) in comes_from[12][(0,11,2)])
+
+    assert ((11, 0, 2) in comes_from[11][(0,11,2)])
+    assert ((11, 0, 2) in comes_from[12][(0,11,2)])
     # assert (valid_outside_map == outside_map)
 
     valid_next_outside_map = set()
     for (x,y,d) in next_outside_map:
+        # print ("NOM", (x,y,d))
         # Add next step to comes_from
         cx, cy = x,y
 
@@ -1327,15 +1356,19 @@ def comes_from_rolls_good_movements(game_map):
                 if (x,y,d) in next_outside_map:
                     valid_next_outside_map.add((x,y,d))
 
-    for (x,y,d) in valid_next_outside_map:
+    for (x,y,d) in valid_outside_map:
         # Add next step to comes_from
-        cx, cy = step_dir(x,y,d)
+        cx, cy = step_dir(x,y,(d+3)%6)
 
         for i in range(1,12+1):
-            comes_from[i][(cx,cy,d)].add((x,y,d))
-        valid_outside_map.add((x,y,d))
+            comes_from[i][(x,y,d)].add((cx,cy,d))
+        valid_next_outside_map.add((cx,cy,d))
+        # valid_outside_map.add((x,y,d))
 
-    return valid_outside_map, valid_next_outside_map, legal_positions, comes_from
+    assert (valid_outside_map == outside_map)
+    assert (valid_next_outside_map == next_outside_map)
+
+    return outside_map, next_outside_map, legal_positions, comes_from
 
 def compute_goto(comes_from, valid_next_outside_map, legal_positions):
     positions = valid_next_outside_map.union(legal_positions)
@@ -1345,9 +1378,116 @@ def compute_goto(comes_from, valid_next_outside_map, legal_positions):
             for ox,oy,od in comes_from[steps][(x,y,d)]:
                 if (ox,oy,od) in go_to[steps]:
                     go_to[steps][(ox,oy,od)].add((x,y,d))
-                else:
-                    print ((ox,oy,od)) # Why?? Off map?? Should be invalid??
+                # else:
+                #     print ("MISSING:",(ox,oy,od)) # Why?? Off map?? Should be invalid??
     return go_to
+
+def compute_goto_path(comes_from, valid_next_outside_map, legal_positions):
+    legal_positions = set()
+    for (x,y) in game_map:
+        dirs,t = game_map[(x,y)]
+        for d in dirs:
+            legal_positions.add((x,y,d))
+
+
+    next_outside_map = set()
+    outside_map = set()
+    for (x,y,d) in legal_positions: # Take up to 12 steps anywhere
+        nx,ny = x,y
+        for _ in range(12+1):
+            nx, ny = step_dir(nx,ny,d)
+            if not (nx,ny,d) in legal_positions:
+                if (nx,ny) in game_map:
+                    next_outside_map.add((nx,ny,d))
+                    nx, ny = step_dir(nx,ny,d)
+                outside_map.add((nx,ny,d))
+                break
+
+    positions = next_outside_map.union(legal_positions)
+    go_to_paths = [{(x,y,d): {} for (x,y,d) in positions} for i in range(12+1)]
+    for (x,y,d) in go_to_paths[0]:
+        if not (x,y,d) in go_to_paths[0][(x,y,d)]:
+            go_to_paths[0][(x,y,d)][(x,y,d)] = set()
+        go_to_paths[0][(x,y,d)][(x,y,d)].add(((x,y,d),))
+
+    for steps in range(0,9):
+        for (x,y,d) in go_to_paths[steps]:
+            for (cx,cy,cd) in go_to_paths[steps][(x,y,d)]:
+                if (cx, cy, cd) in next_outside_map:
+                    continue
+
+                nx,ny = step_dir(cx,cy,cd)
+                for nd in [(cd-1)%6,cd,(cd+1)%6]:
+                    if not ((nx, ny, nd) in legal_positions or (nx, ny, nd) in next_outside_map):
+                        continue
+                    if not (nx,ny,nd) in go_to_paths[steps+1][(x,y,d)]:
+                        go_to_paths[steps+1][(x,y,d)][(nx,ny,nd)] = set()
+                    # Add step to end of each path
+                    for p in go_to_paths[steps][(x,y,d)][(cx,cy,cd)]:
+                        go_to_paths[steps+1][(x,y,d)][(nx,ny,nd)].add((*p,(nx,ny,nd)))
+
+        print ("Explosion!", steps)
+    for steps in range(9,12):
+        for (x,y,d) in go_to_paths[steps]:
+            for (cx,cy,cd) in go_to_paths[steps][(x,y,d)]:
+                if (cx, cy, cd) in next_outside_map:
+                    continue
+
+                straight_paths = list(filter(lambda x: len(set(map(lambda x: x[2], list(x)))) == 1, go_to_paths[steps][(x,y,d)][(cx,cy,cd)]))
+                if len(straight_paths) == 0:
+                    continue
+
+                nx,ny = step_dir(cx,cy,cd)
+                nd = cd
+                if not ((nx, ny, nd) in legal_positions or (nx, ny, nd) in next_outside_map):
+                    continue
+                if not (nx,ny,nd) in go_to_paths[steps+1][(x,y,d)]:
+                    go_to_paths[steps+1][(x,y,d)][(nx,ny,nd)] = set()
+                # Add step to end of each path
+                for p in straight_paths:
+                    go_to_paths[steps+1][(x,y,d)][(nx,ny,nd)].add((*p,(nx,ny,nd)))
+
+        print ("Explosion!", steps)
+
+    for (x,y,d) in outside_map:
+        nx, ny = x,y
+        p = ((nx,ny,d),)
+
+        nx, ny = step_dir(nx,ny,(d+3)%6)
+        if not ((nx, ny, d) in legal_positions or (nx, ny, d) in next_outside_map):
+            break
+        p = ((nx,ny,d),*p)
+
+        for steps in range(1,12+1):
+            for exp in range(max(10,steps),12+1):
+                if not (nx,ny,d) in go_to_paths[exp]:
+                    go_to_paths[exp][(nx,ny,d)] = {}
+                if not (x,y,d) in go_to_paths[exp][(nx,ny,d)]:
+                    go_to_paths[exp][(nx,ny,d)][(x,y,d)] = set()
+                go_to_paths[exp][(nx,ny,d)][(x,y,d)].add(p) # Step off map in any amount of steps
+
+            nx, ny = step_dir(nx,ny,(d+3)%6)
+            if not ((nx, ny, d) in legal_positions or (nx, ny, d) in next_outside_map):
+                break
+            p = ((nx,ny,d),*p)
+
+    for (x,y,d) in next_outside_map:
+        nx, ny = step_dir(x,y,d)
+        for steps in range(1,12+1):
+            if not (nx,ny,d) in go_to_paths[steps][(x,y,d)]:
+                go_to_paths[steps][(x,y,d)][(nx,ny,d)] = set()
+            go_to_paths[steps][(x,y,d)][(nx,ny,d)].add(((x,y,d),(nx,ny,d))) # Step off map in any amount of steps
+
+    for i in range(len(go_to)):
+        for (x,y,d) in go_to[i]:
+            for (nx,ny,nd) in go_to[i][(x,y,d)]:
+                if not (nx,ny,nd) in go_to_paths[i][(x,y,d)]:
+                    print (((i, (x,y,d), (nx,ny,nd))))
+                    print ((nx,ny,nd) in next_outside_map, (nx,ny,nd) in outside_map, (nx,ny,nd) in legal_positions)
+                    print ((x,y,d) in next_outside_map, (x,y,d) in outside_map, (x,y,d) in legal_positions)
+                    assert ((nx,ny,nd) in go_to_paths[i][(x,y,d)])
+
+    return go_to_paths
 
 
 # def racing_line(game_map, position_distance, ):
@@ -1371,6 +1511,7 @@ players = players[:4]
 
 valid_outside_map, valid_next_outside_map, legal_positions, comes_from = comes_from_rolls_good_movements(game_map)
 go_to = compute_goto(comes_from, valid_next_outside_map, legal_positions)
+go_to_paths = compute_goto_path(comes_from, valid_next_outside_map, legal_positions)
 position_distance_goal     = bfs_distance(game_map, start_line, comes_from, go_to)
 position_distance_midpoint = bfs_distance(game_map,  mid_point, comes_from, go_to)
 # go_to = racing_line(game_map, comes_from, position_distance, valid_next_outside_map, legal_positions)
@@ -1386,60 +1527,11 @@ m = np.array(m,dtype=np.uint8)
 
 pre_draw(m,game_map, cx, cy, scale)
 
-# from_to[()][(1,10,2)]
-
-# print ()
-# print (go_to[0][(1,10,2)])
-# print (go_to[1][(1,10,2)])
-# print (go_to[2][(1,10,2)])
-# print (go_to[3][(1,10,2)])
-# print (go_to[4][(1,10,2)])
-# print (go_to[5][(1,10,2)])
-# print (go_to[6][(1,10,2)])
-# print (go_to[7][(1,10,2)])
-# print (go_to[8][(1,10,2)])
-# print (go_to[9][(1,10,2)])
-# print (go_to[10][(1,10,2)])
-# print (go_to[11][(1,10,2)])
-# print (go_to[12][(1,10,2)])
-
-# Random game for dice:
-tng = 3
-
-total_steps_before = []
-total_gas_before = []
-for _ in range(10000):
-    gas = 0
-    steps = []
-    for i in range(tng):
-        r = random.randint(1,6)
-        while r >= 5:
-            r = random.randint(1,6)
-            gas += 1
-        steps.append(r)
-    total_steps_before.append(sum (steps))
-    total_gas_before.append(gas)
-
-total_steps_after = []
-total_gas_after = []
-for _ in range(10000):
-    total_steps_after.append( sum([random.randint(1,4) for i in range(tng)]) )
-    total_gas_after.append(sum(geom.rvs(2/3,size=tng))-tng)
-
-print ("BEFORE:", sum(total_steps_before), sum(total_gas_before))
-print ("After:", sum(total_steps_after), sum(total_gas_after))
-print (2.5 * 10000, 10000 / 2 * tng)
-print (sum([n * (1/3)**n for n in range(10)])) # n * (1/3)^n
-exit()
-
-print (total_gas_before[:10])
-print (total_gas_after[:10])
-
-# for i,j,d in {(10,0,0)}:
-#     xi, yi = hex_coord(i, j, cx, cy, scale)
-#     for xj in range(-3,3+1):
-#         for yj in range(-3,3+1):
-#             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
+for i,j,d in {(2, 0, 0)}:
+    xi, yi = hex_coord(i, j, cx, cy, scale)
+    for xj in range(-3,3+1):
+        for yj in range(-3,3+1):
+            draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
 
 # for i,j,d in {(1,2,5)}:
 #     xi, yi = hex_coord(i, j, cx, cy, scale)
@@ -1456,17 +1548,19 @@ print (total_gas_after[:10])
 frame = save_map(np.array(m,dtype=np.uint8), f'Maps/000_map.png', [], (0, []), scale, out_of_map_counter) # players
 frames.append(frame)
 
+# exit()
+
 drinking = [0 for p in players]
 moves = [0 for p in players]
 
 iters = 0
-total_rounds = 40
+total_rounds = 4000
 while (iters < total_rounds):
     iters += 1
 
     print(f'\nframe {iters:03d}.png')
     for pl,((x,y),d,g,player_state,rounds) in enumerate(players):
-        players[pl], players_steps, sips, steps = step_player(pl,players[pl],fell_off_map)
+        players[pl], players_steps, sips, steps = step_player(pl,players,fell_off_map)
 
         if fell_off_map[pl]:
             ox,oy = players[pl][0]
@@ -1503,3 +1597,5 @@ print ("Per player", drinking)
 
 frames[0].save(f'Maps/map.gif', append_images=frames[1:], save_all=True, duration=120, loop=0)
 # frames[0].save(f'Maps/map.gif', format='GIF', append_images=frames[1:], save_all=True, duration=120, loop=0)
+
+# Procedural generated racebile with powerups affecting map-gen
