@@ -429,25 +429,48 @@ def step_player(pl,players,fell_off_map):
             return racing_line
 
         racing_line = get_racing_line(lookahead)
-        while len(racing_line) == 0:
-            lookahead -= 1
-            sips["bonk"] += 1
-            racing_line = get_racing_line(lookahead)
+        if len(racing_line) == 0 and lookahead >= 10:
+            # TODO: Handle 10-12 when blocked!
+            def handle_10_to_12_blocked():
+                assert (len(go_to_paths[lookahead][(x,y,d)]) == 1)
+                for (nx,ny,nd) in go_to_paths[lookahead][(x,y,d)]:
+                    assert (len(go_to_paths[lookahead][(x,y,d)][(nx,ny,nd)]) == 1)
+                    for p in go_to_paths[lookahead][(x,y,d)][(nx,ny,nd)]:
+                        pl = [*p]
+                        while any(b in map(lambda x: (x[0],x[1]), pl) for b in blocked):
+                            pl = pl[:-1]
+                            return [(None,(nx,ny,nd),pl)]
+                assert (False)
+            racing_line = handle_10_to_12_blocked()
+            sips["bonk"] += lookahead - len(racing_line)
+            print ("!!! HAPPEND HERE !!!")
+        else:
+            while len(racing_line) == 0:
+                lookahead -= 1
+                sips["bonk"] += 1
+                racing_line = get_racing_line(lookahead)
 
         px,py,pd = racing_line[0][1]
         player_steps = player_steps + [*racing_line[0][2]]
         # End of strategy
+
+        sips["turn"] = sum([0 if (d1 == d2) else 1 for (_,_,d1), (_,_,d2) in zip([*racing_line[0][2]], [*racing_line[0][2]][1:])]) if sum(steps) >= 7 else 0
 
         if len([*racing_line[0][2]]) < sum(steps):
             blockers = list(filter(lambda x: x, (opl != pl and (x,y) == step_dir(px,py,pd) for opl,((x,y),d,_,_,r) in enumerate(players))))
             if len(blockers) == 1 and (not lookup_in_map(*step_dir(px,py,pd)) is None and 3 in lookup_in_map(*step_dir(px,py,pd))[1]):
                 blocked.remove(step_dir(px,py,pd)) # Unflip player
 
-                
-        
         sips["off_map"] = int(not ((px, py, pd) in legal_positions or (px, py, pd) in next_outside_map))
 
         ng = ng if not sips["off_map"] else 0
+
+        # TODO: Handle this better!
+        start_line_pos = [(x,y,d) for x,y in start_line for d in game_map[(x,y)][0]][0]
+        sips["goal_cheer"] = int(get_position(x,y,d) <= get_position(*start_line_pos) < get_position(px,py,pd))
+        midpoint_pos = [(x,y,d) for x,y in mid_point for d in game_map[(x,y)][0]][0]
+        sips["halfway_cheer"] = int(get_position(x,y,d) <= get_position(*midpoint_pos) < get_position(px,py,pd))
+
         nrounds = rounds + int(get_position(x,y,d) < get_position(px,py,pd))
         # print ("ROUND:", nrounds)
         ret_val = ((px, py), pd, ng, player_state, nrounds)
@@ -458,7 +481,6 @@ def step_player(pl,players,fell_off_map):
 
     if (not lookup_in_map(*ret_val[0]) is None and 3 in lookup_in_map(*ret_val[0])[1]) or any(opl != pl and (x,y) == ret_val[0] for opl,((x,y),d,_,_,r) in enumerate(players)):
         blocked.add(ret_val[0])
-    print ("BLOCKED:", blocked)
 
     fell_off_map[pl] = sips["off_map"]
 
@@ -1472,6 +1494,9 @@ while (iters < total_rounds):
         print (sips)
 
         drinking[pl] += total_sips
+        for opl in range(len(players)):
+            if opl != pl: drinking[opl] += sips["halfway_cheer"] + sips["goal_cheer"] # Everyone drinks on cheers!
+
         moves[pl] += 1
 
         if iters < 40:
