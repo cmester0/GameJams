@@ -430,7 +430,7 @@ def step_player(pl,players,fell_off_map):
         player_steps = player_steps + [*racing_line[0][2]]
         # End of strategy
 
-        sips["off_map"] = int(not ((px, py, pd) in legal_positions or (px, py, pd) in valid_next_outside_map))
+        sips["off_map"] = int(not ((px, py, pd) in legal_positions or (px, py, pd) in next_outside_map))
 
         ng = ng if not sips["off_map"] else 0
         nrounds = rounds + int(get_position(x,y,d) < get_position(px,py,pd))
@@ -1220,7 +1220,7 @@ def pod_racing_map():
     return game_map, players, start_line, mid_point
 
 # Distance to goal:
-def bfs_distance(game_map, start_line, comes_from, go_to):
+def bfs_distance(game_map, start_line, comes_from):
     position_distance = {}
     stk = [(0,x,y,d) for x,y in start_line for d in game_map[(x,y)][0]]
     # visited = set()
@@ -1243,146 +1243,9 @@ def bfs_distance(game_map, start_line, comes_from, go_to):
         for nx,ny,nd in comes_from[1][(x,y,d)]:
             heapq.heappush(stk,(dist+1,nx,ny,nd))
 
-    # start = [(x,y,d) for x,y in start_line for d in game_map[(x,y)][0]]
-
-    print (set(iter(legal_positions)) - set(iter(position_distance)))
-    print (len(legal_positions))
-    print (len(position_distance), len(comes_from[1]))
-    # assert (len(position_distance) == len(comes_from[1]))
     return position_distance
 
-def comes_from_rolls_good_movements(game_map):
-    legal_positions = set()
-    for (x,y) in game_map:
-        dirs,t = game_map[(x,y)]
-        for d in dirs:
-            legal_positions.add((x,y,d))
-
-
-    next_outside_map = set()
-    outside_map = set()
-    for (x,y,d) in legal_positions: # Take up to 12 steps anywhere
-        nx,ny = x,y
-        for _ in range(12+1):
-            nx, ny = step_dir(nx,ny,d)
-            if not (nx,ny,d) in legal_positions:
-                if (nx,ny) in game_map:
-                    next_outside_map.add((nx,ny,d))
-                    nx, ny = step_dir(nx,ny,d)
-                outside_map.add((nx,ny,d))
-                break
-
-    positions = legal_positions.union(next_outside_map).union(outside_map)
-
-    comes_from = [
-        {(x,y,d): set([(x,y,d)]) for x,y,d in positions}
-    ] + [
-        {(x,y,d): set(         ) for x,y,d in positions}
-        for _ in range(12)
-    ]
-
-    # # (x,y,d) steps_to (nx,ny,nd) in one step
-    # # steps_to[(x,y,d)] = (nx,ny,nd)
-
-    # Take 1 valid step
-    for (x,y,d) in legal_positions: # 1
-        nx, ny = step_dir(x,y,d)
-        for nd in filter(lambda v: v in game_map[(nx,ny)][0] and (nx,ny,v) in legal_positions, [(d-1)%6,d,(d+1)%6]):
-            comes_from[1][(nx,ny,nd)].add((x,y,d))
-
-    # n valid step
-    for steps in range(1,9): # 2-9
-        # Where can come from in n steps?
-        for (x,y,d) in comes_from[steps]:
-            # Remove duplicates with DP!
-            for cx,cy,cd in comes_from[steps][(x,y,d)]:
-                for nx,ny,nd in comes_from[1][(cx,cy,cd)]:
-                    comes_from[steps+1][(x,y,d)].add((nx,ny,nd))
-
-    for (x,y,d) in legal_positions:
-        cx,cy = x,y
-        # Check if you can take 10-12 steps backwards
-        for i in range(1,12+1):
-            # Add next step to comes_from
-            cx, cy = step_dir(cx,cy,(d+3)%6)
-            if (not (cx,cy,d) in legal_positions):
-                break
-            comes_from[i][(x,y,d)].add((cx,cy,d))
-
-    backtrack_positions = legal_positions.union(next_outside_map)
-
-    valid_outside_map = set()
-    for (x,y,d) in outside_map:
-        # Add next step to comes_from
-        cx, cy = step_dir(x,y,(d+3)%6)
-        if (not (cx,cy,d) in next_outside_map and
-            not (cx,cy,d) in legal_positions):
-            break
-
-        for j in range(max(10,i),12+1):
-            comes_from[j][(x,y,d)].add((cx,cy,d))
-            valid_outside_map.add((x,y,d))
-
-        # Check if you can take 10-12 steps backwards
-        for i in range(2,12+1):
-            cx, cy = step_dir(cx,cy,(d+3)%6)
-            if not (cx,cy,d) in legal_positions:
-                break
-            for j in range(max(10,i),12+1):
-                comes_from[j][(x,y,d)].add((cx,cy,d))
-                valid_outside_map.add((x,y,d))
-
-    assert ((10, 1, 2) in comes_from[10][(0,11,2)])
-    assert ((10, 1, 2) in comes_from[11][(0,11,2)])
-    assert ((10, 1, 2) in comes_from[12][(0,11,2)])
-
-    assert ((11, 0, 2) in comes_from[11][(0,11,2)])
-    assert ((11, 0, 2) in comes_from[12][(0,11,2)])
-    # assert (valid_outside_map == outside_map)
-
-    valid_next_outside_map = set()
-    for (x,y,d) in next_outside_map:
-        # print ("NOM", (x,y,d))
-        # Add next step to comes_from
-        cx, cy = x,y
-
-        # Check if you can take 10-12 steps backwards
-        for i in range(1,12+1):
-            cx, cy = step_dir(cx,cy,(d+3)%6)
-            if not (cx,cy,d) in legal_positions:
-                break
-            if i >= 10: # 10,11,12
-                comes_from[i][(x,y,d)].add((cx,cy,d))
-                if (x,y,d) in next_outside_map:
-                    valid_next_outside_map.add((x,y,d))
-
-    for (x,y,d) in valid_outside_map:
-        # Add next step to comes_from
-        cx, cy = step_dir(x,y,(d+3)%6)
-
-        for i in range(1,12+1):
-            comes_from[i][(x,y,d)].add((cx,cy,d))
-        valid_next_outside_map.add((cx,cy,d))
-        # valid_outside_map.add((x,y,d))
-
-    assert (valid_outside_map == outside_map)
-    assert (valid_next_outside_map == next_outside_map)
-
-    return outside_map, next_outside_map, legal_positions, comes_from
-
-def compute_goto(comes_from, valid_next_outside_map, legal_positions):
-    positions = valid_next_outside_map.union(legal_positions)
-    go_to = [{(x,y,d): set() for (x,y,d) in positions} for i in range(12+1)]
-    for steps in range(12+1):
-        for (x,y,d) in comes_from[steps]:
-            for ox,oy,od in comes_from[steps][(x,y,d)]:
-                if (ox,oy,od) in go_to[steps]:
-                    go_to[steps][(ox,oy,od)].add((x,y,d))
-                # else:
-                #     print ("MISSING:",(ox,oy,od)) # Why?? Off map?? Should be invalid??
-    return go_to
-
-def compute_goto_path(comes_from, valid_next_outside_map, legal_positions):
+def compute_goto_path(game_map):
     legal_positions = set()
     for (x,y) in game_map:
         dirs,t = game_map[(x,y)]
@@ -1478,16 +1341,16 @@ def compute_goto_path(comes_from, valid_next_outside_map, legal_positions):
                 go_to_paths[steps][(x,y,d)][(nx,ny,d)] = set()
             go_to_paths[steps][(x,y,d)][(nx,ny,d)].add(((x,y,d),(nx,ny,d))) # Step off map in any amount of steps
 
-    for i in range(len(go_to)):
-        for (x,y,d) in go_to[i]:
-            for (nx,ny,nd) in go_to[i][(x,y,d)]:
-                if not (nx,ny,nd) in go_to_paths[i][(x,y,d)]:
-                    print (((i, (x,y,d), (nx,ny,nd))))
-                    print ((nx,ny,nd) in next_outside_map, (nx,ny,nd) in outside_map, (nx,ny,nd) in legal_positions)
-                    print ((x,y,d) in next_outside_map, (x,y,d) in outside_map, (x,y,d) in legal_positions)
-                    assert ((nx,ny,nd) in go_to_paths[i][(x,y,d)])
+    # for i in range(len(go_to)):
+    #     for (x,y,d) in go_to[i]:
+    #         for (nx,ny,nd) in go_to[i][(x,y,d)]:
+    #             if not (nx,ny,nd) in go_to_paths[i][(x,y,d)]:
+    #                 print (((i, (x,y,d), (nx,ny,nd))))
+    #                 print ((nx,ny,nd) in next_outside_map, (nx,ny,nd) in outside_map, (nx,ny,nd) in legal_positions)
+    #                 print ((x,y,d) in next_outside_map, (x,y,d) in outside_map, (x,y,d) in legal_positions)
+    #                 assert ((nx,ny,nd) in go_to_paths[i][(x,y,d)])
 
-    return go_to_paths
+    return legal_positions, outside_map, next_outside_map, go_to_paths
 
 
 # def racing_line(game_map, position_distance, ):
@@ -1501,6 +1364,16 @@ def compute_goto_path(comes_from, valid_next_outside_map, legal_positions):
 
 #     return go_to
 
+def compute_comes_from(go_to_paths):
+    comes_from = [{} for i in range(12+1)]
+    for steps in range(len(go_to_paths)):
+        for (x,y,d) in go_to_paths[steps]:
+            for (nx,ny,nd) in go_to_paths[steps][(x,y,d)]:
+                if not (nx,ny,nd) in comes_from[steps]:
+                    comes_from[steps][(nx,ny,nd)] = set()
+                comes_from[steps][(nx,ny,nd)].add((x,y,d))
+    return comes_from
+
 # game_map, players, start_line, mid_point = rtfm_map()
 game_map, players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = clover_map()
@@ -1509,11 +1382,10 @@ game_map, players, start_line, mid_point = loop_map()
 
 players = players[:4]
 
-valid_outside_map, valid_next_outside_map, legal_positions, comes_from = comes_from_rolls_good_movements(game_map)
-go_to = compute_goto(comes_from, valid_next_outside_map, legal_positions)
-go_to_paths = compute_goto_path(comes_from, valid_next_outside_map, legal_positions)
-position_distance_goal     = bfs_distance(game_map, start_line, comes_from, go_to)
-position_distance_midpoint = bfs_distance(game_map,  mid_point, comes_from, go_to)
+legal_positions, outside_map, next_outside_map, go_to_paths = compute_goto_path(game_map)
+comes_from = compute_comes_from(go_to_paths)
+position_distance_goal     = bfs_distance(game_map, start_line, comes_from)
+position_distance_midpoint = bfs_distance(game_map,  mid_point, comes_from)
 # go_to = racing_line(game_map, comes_from, position_distance, valid_next_outside_map, legal_positions)
 
 scale, (cx, cy) = compute_scale_and_center()
