@@ -368,6 +368,8 @@ def get_position(x,y,d):
         ox, oy = step_dir(x,y,(d+3)%6)
         return min((position_distance_goal[(ox,oy,d)],d) for d in range(6) if (ox,oy,d) in position_distance_goal)[1]
 
+blocked = set()
+
 def step_player(pl,players,fell_off_map):
     (x,y),d,g,player_state,rounds = players[pl]
 
@@ -384,60 +386,83 @@ def step_player(pl,players,fell_off_map):
     player_steps = []
 
     if fell_off_map[pl]:
+        player_steps.append((x,y,d))
         x,y = step_dir(x,y,(d+3)%6)
         d, player_state = get_map_dirs(x, y, -1, player_state, False)
         player_steps.append((x,y,d))
 
-    sips["start_last"] = min((((r,position_distance_goal[(x,y,d)] if (x,y,d) in position_distance_goal else inf),pl) for pl,((x,y),d,_,_,r) in enumerate(players)), key=lambda x: x[0])[1] == pl
+    sips["start_last"] = int(min((((r,position_distance_goal[(x,y,d)] if (x,y,d) in position_distance_goal else inf),pl) for pl,((x,y),d,_,_,r) in enumerate(players)), key=lambda x: x[0])[1] == pl)
 
     if steps == [1,1,1]: # Destroy gear box
         sips["gear_box"] += 1
         ng = 0
         ret_val = ((x,y),d,ng,player_state,rounds)
     else:
-        sips["koblingsfejl"] = len(list(filter(lambda x: x == 1, steps)))
 
-        # px,py,pd,player_steps, player_state = step_dir_n(x, y, d, sum(steps), sips, player_state, fell_off_map[pl])
+        if (x,y) in blocked:
+            blocked.remove((x,y))
+
+        sips["koblingsfejl"] = len(list(filter(lambda x: x == 1, steps)))
 
         # Greedy
         lookahead = sum(steps)
-        l = []
-        use_goal = True
-        for (nx,ny,nd) in go_to_paths[lookahead][(x,y,d)]:
-            # print ("paths", go_to_paths[lookahead][(x,y,d)][nx,ny,nd])
-            for p in go_to_paths[lookahead][(x,y,d)][nx,ny,nd]:
-                if (nx,ny,nd) in position_distance_goal:
-                    # print (position_distance_goal[(nx,ny,nd)])
-                    l.append(((position_distance_goal[(nx,ny,nd)], position_distance_midpoint[(nx,ny,nd)]), (nx,ny,nd), p))
-                    if position_distance_goal[(nx,ny,nd)] < 12:
-                        use_goal = False
-                else:
-                    l.append(((inf, inf), (nx,ny,nd), p)) # Todo: calculate actual distance when falling off!
 
-        l = sorted(map(lambda x: (x[0][0] if use_goal else x[0][1],x[1],x[2]), l))
+        def get_racing_line(lookahead):
+            l = []
+            use_goal = True
+            for (nx,ny,nd) in go_to_paths[lookahead][(x,y,d)]:
+                for p in go_to_paths[lookahead][(x,y,d)][nx,ny,nd]:
+                    if any(b in map(lambda x: (x[0],x[1]), [*p]) for b in blocked):
+                        continue
 
-        # Strategy!
-        # print ((x,y,d), l, lookahead, go_to[lookahead][(x,y,d)], go_to_paths[lookahead][(x,y,d)])
-        racing_line = list(filter(lambda x: x[0] == min(l)[0], l))
-        if (len(racing_line) <= 0):
-            print (str(((x,y,d), l, lookahead, go_to[lookahead][(x,y,d)], go_to_paths[lookahead][(x,y,d)])))
-            assert (len(racing_line) > 0)
+                    if (nx,ny,nd) in position_distance_goal:
+                        l.append(((position_distance_goal[(nx,ny,nd)], position_distance_midpoint[(nx,ny,nd)]), (nx,ny,nd), p))
+                        if position_distance_goal[(nx,ny,nd)] < 12:
+                            use_goal = False
+                    else:
+                        l.append(((inf, inf), (nx,ny,nd), p)) # Todo: calculate actual distance when falling off!
 
-        print (racing_line, len(racing_line) > 0)
-        print (racing_line[0])
-        print ()
+            l = sorted(map(lambda x: (x[0][0] if use_goal else x[0][1],x[1],x[2]), l))
+
+            # Strategy!
+            racing_line = list(filter(lambda x: x[0] == min(l)[0], l))
+            return racing_line
+
+        racing_line = get_racing_line(lookahead)
+        while len(racing_line) == 0:
+            lookahead -= 1
+            sips["bonk"] += 1
+            racing_line = get_racing_line(lookahead)
+
         px,py,pd = racing_line[0][1]
         player_steps = player_steps + [*racing_line[0][2]]
         # End of strategy
 
+        if len([*racing_line[0][2]]) < sum(steps):
+            blockers = list(filter(lambda x: x, (opl != pl and (x,y) == step_dir(px,py,pd) for opl,((x,y),d,_,_,r) in enumerate(players))))
+            if len(blockers) == 1 and (not lookup_in_map(*step_dir(px,py,pd)) is None and 3 in lookup_in_map(*step_dir(px,py,pd))[1]):
+                blocked.remove(step_dir(px,py,pd)) # Unflip player
+
+                
+        
         sips["off_map"] = int(not ((px, py, pd) in legal_positions or (px, py, pd) in next_outside_map))
 
         ng = ng if not sips["off_map"] else 0
         nrounds = rounds + int(get_position(x,y,d) < get_position(px,py,pd))
         # print ("ROUND:", nrounds)
         ret_val = ((px, py), pd, ng, player_state, nrounds)
+
+    players[pl] = ret_val
+
+    sips["end_first"] = int(max((((r,position_distance_goal[(x,y,d)] if (x,y,d) in position_distance_goal else inf),pl) for pl,((x,y),d,_,_,r) in enumerate(players)), key=lambda x: x[0])[1] == pl)
+
+    if (not lookup_in_map(*ret_val[0]) is None and 3 in lookup_in_map(*ret_val[0])[1]) or any(opl != pl and (x,y) == ret_val[0] for opl,((x,y),d,_,_,r) in enumerate(players)):
+        blocked.add(ret_val[0])
+    print ("BLOCKED:", blocked)
+
     fell_off_map[pl] = sips["off_map"]
-    return ret_val, player_steps, sips, steps
+
+    return player_steps, sips, steps
 
 def rtfm_map():
     # 0 standard, 1 start fields, 2 blue, 3 star, 4 choice direction, 5 forced dirs
@@ -1380,7 +1405,7 @@ game_map, players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = tight_clover_map()
 # game_map, players, start_line, mid_point = pod_racing_map()
 
-players = players[:4]
+players = players[:8]
 
 legal_positions, outside_map, next_outside_map, go_to_paths = compute_goto_path(game_map)
 comes_from = compute_comes_from(go_to_paths)
@@ -1426,13 +1451,13 @@ drinking = [0 for p in players]
 moves = [0 for p in players]
 
 iters = 0
-total_rounds = 4000
+total_rounds = 10000
 while (iters < total_rounds):
     iters += 1
 
     print(f'\nframe {iters:03d}.png')
     for pl,((x,y),d,g,player_state,rounds) in enumerate(players):
-        players[pl], players_steps, sips, steps = step_player(pl,players,fell_off_map)
+        players_steps, sips, steps = step_player(pl,players,fell_off_map)
 
         if fell_off_map[pl]:
             ox,oy = players[pl][0]
