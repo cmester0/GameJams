@@ -158,7 +158,7 @@ def pre_draw(m, game_map, cx, cy, scale):
 
 def draw_map(m, players, player_steps, cx, cy, scale, fell_off_map):
     # pre_draw(m,game_map, cx, cy, scale)
-    
+
     pl, player_steps = player_steps
     for ps,(i,j,d) in enumerate(player_steps):
         xi, yi = hex_coord(i, j, cx, cy, scale)
@@ -386,14 +386,21 @@ def step_player(pl,players,fell_off_map):
     player_steps = []
 
     if fell_off_map[pl]:
-        player_steps.append((x,y,d))
-        x,y = step_dir(x,y,(d+3)%6)
-        d, player_state = get_map_dirs(x, y, -1, player_state, False)
-        player_steps.append((x,y,d))
+        # TODO: Drink?
+        if step_dir(x,y,(d+3)%6) in blocked:
+            sips["off_map"] = 1
+        else:
+            player_steps.append((x,y,d))
+            x,y = step_dir(x,y,(d+3)%6)
+            d, player_state = get_map_dirs(x, y, -1, player_state, False)
+            player_steps.append((x,y,d))
 
     sips["start_last"] = int(min((((r,position_distance_goal[(x,y,d)] if (x,y,d) in position_distance_goal else inf),pl) for pl,((x,y),d,_,_,r) in enumerate(players)), key=lambda x: x[0])[1] == pl)
 
-    if steps == [1,1,1]: # Destroy gear box
+    if sips["off_map"] == 1:
+        ng = 0
+        ret_val = ((x,y),d,ng,player_state,rounds)
+    elif steps == [1,1,1]: # Destroy gear box
         sips["gear_box"] += 1
         ng = 0
         ret_val = ((x,y),d,ng,player_state,rounds)
@@ -454,12 +461,14 @@ def step_player(pl,players,fell_off_map):
         player_steps = player_steps + [*racing_line[0][2]]
         # End of strategy
 
+        print (sum(steps), blocked)
         sips["turn"] = sum([0 if (d1 == d2) else 1 for (_,_,d1), (_,_,d2) in zip([*racing_line[0][2]], [*racing_line[0][2]][1:])]) if sum(steps) >= 7 else 0
 
         if len([*racing_line[0][2]]) < sum(steps):
             blockers = list(filter(lambda x: x, (opl != pl and (x,y) == step_dir(px,py,pd) for opl,((x,y),d,_,_,r) in enumerate(players))))
             if len(blockers) == 1 and (not lookup_in_map(*step_dir(px,py,pd)) is None and 3 in lookup_in_map(*step_dir(px,py,pd))[1]):
-                blocked.remove(step_dir(px,py,pd)) # Unflip player
+                if step_dir(px,py,pd) in blocked:
+                    blocked.remove(step_dir(px,py,pd)) # Unflip player
 
         sips["off_map"] = int(not ((px, py, pd) in legal_positions or (px, py, pd) in next_outside_map))
 
@@ -480,7 +489,8 @@ def step_player(pl,players,fell_off_map):
     sips["end_first"] = int(max((((r,position_distance_goal[(x,y,d)] if (x,y,d) in position_distance_goal else inf),pl) for pl,((x,y),d,_,_,r) in enumerate(players)), key=lambda x: x[0])[1] == pl)
 
     if (not lookup_in_map(*ret_val[0]) is None and 3 in lookup_in_map(*ret_val[0])[1]) or any(opl != pl and (x,y) == ret_val[0] for opl,((x,y),d,_,_,r) in enumerate(players)):
-        blocked.add(ret_val[0])
+        if not (*ret_val[0],ret_val[1]) in outside_map:
+            blocked.add(ret_val[0])
 
     fell_off_map[pl] = sips["off_map"]
 
@@ -1310,6 +1320,8 @@ def compute_goto_path(game_map):
                 if (nx,ny) in game_map:
                     next_outside_map.add((nx,ny,d))
                     nx, ny = step_dir(nx,ny,d)
+                if (nx,ny) in game_map:
+                    print ("TODO:", (nx,ny,d))
                 outside_map.add((nx,ny,d))
                 break
 
@@ -1446,7 +1458,7 @@ m = np.array(m,dtype=np.uint8)
 
 pre_draw(m,game_map, cx, cy, scale)
 
-for i,j,d in {(2, 0, 0)}:
+for i,j,d in {(3, 0, 5), (15, 2, 5), (9, 2, 1)}:
     xi, yi = hex_coord(i, j, cx, cy, scale)
     for xj in range(-3,3+1):
         for yj in range(-3,3+1):
@@ -1473,7 +1485,7 @@ drinking = [0 for p in players]
 moves = [0 for p in players]
 
 iters = 0
-total_rounds = 10000
+total_rounds = 100_000
 while (iters < total_rounds):
     iters += 1
 
@@ -1499,7 +1511,7 @@ while (iters < total_rounds):
 
         moves[pl] += 1
 
-        if iters < 40:
+        if iters < 20:
             filename = f'Maps/{iters:03d}_{pl:02d}_a_map.png'
             frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, players_steps), scale,out_of_map_counter)
             if iters < 10: frames.append(frame)
