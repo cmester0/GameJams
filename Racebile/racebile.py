@@ -17,8 +17,8 @@ from scipy.stats import geom
 from scipy.stats import binom
 
 # Setup
-width = 1500 # 1500
-height = 1500
+width = 2000 # 1500
+height = 2000
 
 # Helper functions
 
@@ -461,7 +461,6 @@ def step_player(pl,players,fell_off_map):
         player_steps = player_steps + [*racing_line[0][2]]
         # End of strategy
 
-        print (sum(steps), blocked)
         sips["turn"] = sum([0 if (d1 == d2) else 1 for (_,_,d1), (_,_,d2) in zip([*racing_line[0][2]], [*racing_line[0][2]][1:])]) if sum(steps) >= 7 else 0
 
         if len([*racing_line[0][2]]) < sum(steps):
@@ -500,13 +499,13 @@ def rtfm_map():
     # 0 standard, 1 start fields, 2 blue, 3 star, 4 choice direction, 5 forced dirs
     game_map = {
         # Start Setup
-        ( 0, 0): ([4,5],[1]),
+        ( 0, 0): ([  5],[1]),
         (-1, 0): ([0,5],[1]),
         (-1, 1): ([4,5],[1]),
         (-2, 1): ([0,5],[1]),
         (-2, 2): ([4,5],[1]),
         (-3, 2): ([0,5],[1]),
-        (-3, 3): ([4,5],[1]),
+        (-3, 3): ([5],[1]),
         (-4, 3): ([0,5],[1]),
 
         # Around map
@@ -537,8 +536,8 @@ def rtfm_map():
         ( 2, 7): ([3],  [2]),
         ( 1, 7): ([3],  [0]),
         ( 0, 7): ([3,4],[0]),
-        ( 0, 6): ([2,3],[2]),
-        (-1, 7): ([3,4],[0]),
+        ( 0, 6): ([3],[2]),
+        (-1, 7): ([3],[0]),
         (-1, 6): ([2],  [2]),
 
         # Midpoint
@@ -559,15 +558,15 @@ def rtfm_map():
         (-6, 9): ([3],  [0]),
         (-7, 9): ([4],  [0]),
         (-7, 8): ([3,4],[0]),
-        (-8, 8): ([4,5],[2]),
-        (-7, 7): ([3,4],[0]),
+        (-8, 8): ([4],[2]),
+        (-7, 7): ([4],[0]),
         (-8, 7): ([5],  [2]),
         (-7, 6): ([5],  [3]),
         (-6, 5): ([5],  [0]),
         (-5, 4): ([5],  [0]),
     }
     start_line = [( 0, 0), ( 0, -1)]
-    mid_point = []
+    mid_point = [(-1, 6), (-1, 7)]
     players = [
         # Start Setup
         (( 0, 0), 5, 0, {(-5,10): 0},0),
@@ -1433,8 +1432,8 @@ def compute_comes_from(go_to_paths):
                 comes_from[steps][(nx,ny,nd)].add((x,y,d))
     return comes_from
 
-# game_map, players, start_line, mid_point = rtfm_map()
-game_map, players, start_line, mid_point = loop_map()
+game_map, players, start_line, mid_point = rtfm_map()
+# game_map, players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = clover_map()
 # game_map, players, start_line, mid_point = tight_clover_map()
 # game_map, players, start_line, mid_point = pod_racing_map()
@@ -1458,11 +1457,11 @@ m = np.array(m,dtype=np.uint8)
 
 pre_draw(m,game_map, cx, cy, scale)
 
-for i,j,d in {(3, 0, 5), (15, 2, 5), (9, 2, 1)}:
-    xi, yi = hex_coord(i, j, cx, cy, scale)
-    for xj in range(-3,3+1):
-        for yj in range(-3,3+1):
-            draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
+# for i,j,d in {(3, 0, 5), (15, 2, 5), (9, 2, 1)}:
+#     xi, yi = hex_coord(i, j, cx, cy, scale)
+#     for xj in range(-3,3+1):
+#         for yj in range(-3,3+1):
+#             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
 
 # for i,j,d in {(1,2,5)}:
 #     xi, yi = hex_coord(i, j, cx, cy, scale)
@@ -1485,7 +1484,7 @@ drinking = [0 for p in players]
 moves = [0 for p in players]
 
 iters = 0
-total_rounds = 100_000
+total_rounds = 1_000_000
 while (iters < total_rounds):
     iters += 1
 
