@@ -77,30 +77,6 @@ def step_dir(x,y,d):
     elif d == 5:
         return (x+1, y-1)
 
-def weigh_direction_towards_start(x,y,d):
-    (nx, ny) = step_dir(0,0,(d-1)%6)
-    w1 = ((x - nx) ** 2 + (y - ny) ** 2)
-    (nx, ny) = step_dir(0,0,(d+0)%6)
-    w2 = ((x - nx) ** 2 + (y - ny) ** 2)
-    (nx, ny) = step_dir(0,0,(d+1)%6)
-    w3 = ((x - nx) ** 2 + (y - ny) ** 2)
-    r = random.randint(0,w1+w2+w3-1)
-    if 0 <= r <= w1:
-        return -1
-    elif w1 <= r <= w1+w2:
-        return 0
-    else:
-        return 1
-
-def gen_map_from_dirs(dirs):
-    x = 0
-    y = 0
-    gm = []
-    for d in dirs:
-        gm.append((x,y,d))
-        x,y = step_dir(x,y,d)
-    return gm
-
 def draw_circle(m, xi, yi, radius, color):
     for i in range(360):
         m[round(xi + radius * cos(i / 360 * 2 * pi))][round(yi + radius * sin(i / 360 * 2 * pi))] = color
@@ -236,18 +212,12 @@ def compute_scale_and_center():
 def save_map(m, filename, players, player_steps, scale, fell_off_map):
     draw_map(m, players, player_steps, cx, cy, scale, fell_off_map)
 
-    # flat_m = (itertools.chain.from_iterable(m)) # [m[i][j] for j in reversed(range(height)) for i in range(width)]
-
-    # img = Image.new('RGB', (width, height)) # width, height
-    # img.putdata(flat_m)
-
-    # arr = np.array(m,dtype=np.uint8)
     img = Image.fromarray(m, "RGB")
     img = img.rotate(90)
 
     t = Thread(target=lambda i,f: i.save(f), args=[img, filename])
     t.start()
-    
+
     return img
 
 def lookup_in_map(x,y):
@@ -256,14 +226,7 @@ def lookup_in_map(x,y):
     else:
         return game_map[(x,y)]
 
-def player_block(x,y):
-    l = list(filter(lambda v: v[0] == x and v[1] == y, players))
-    cm = lookup_in_map(x,y)
-    return len(l) >= 2 or (not cm is None and 3 in cm[1] and len(l) >= 1)
-
-def off_map(x,y):
-    return not (x,y) in game_map
-
+# TODO: compute directions when falling off map in step instead
 def get_map_dirs(x, y, cd, player_state, update):
     cm = lookup_in_map(x,y)
     if cm is None:
@@ -292,74 +255,6 @@ def get_map_dirs(x, y, cd, player_state, update):
 
         # d = cm[0][0]
     return d, player_state
-
-def step_dir_update_dir(x,y,d, player_state,fell_off_map):
-    # if d is None:
-    #     return x,y,d,False,False,player_state
-
-    nx, ny = step_dir(x,y,d)
-    if player_block(nx,ny):
-        md, player_state = get_map_dirs(x, y, d, player_state, update=False)
-        md = d if md is None else md
-        return x,y, md, False, True, player_state
-
-    nd, player_state = get_map_dirs(nx, ny, d, player_state, update=True)
-    nd = d if nd is None else nd
-    return nx, ny, nd, d == nd, False, player_state
-
-def step_dir_n(x,y,d,n, sips, player_state, fell_off_map):
-    player_steps = []
-    player_steps.append((x,y,d))
-
-    if fell_off_map:
-        x,y = step_dir(x,y,(d+3)%6)
-        d, player_state = get_map_dirs(x, y, -1, player_state, False)
-        player_steps.append((x,y,d))
-
-    if n <= 9:
-        next_off_map = False
-        for ni in range(n):
-            x,y,d,t,bonk,player_state = step_dir_update_dir(x,y,d,player_state, fell_off_map)
-
-            if bonk:
-                sips["bonk"] += n - ni
-                break
-
-            if n >= 7:
-                sips["turn"] += 1
-
-            if off_map(x,y) or next_off_map:
-                sips["off_map"] += 1
-                break
-
-            if not d in lookup_in_map(x,y)[0]:
-                next_off_map = True
-
-            player_steps.append((x,y,d))
-
-        return x,y,d, player_steps, player_state
-    else:
-        next_off_map = False
-        for ni in range(n):
-            nx,ny = step_dir(x,y,d)
-
-            if player_block(nx,ny):
-                sips["bonk"] += n - ni
-                break
-
-            x, y = nx, ny
-            nd, player_state = get_map_dirs(x, y, -1, player_state, True)
-
-            if off_map(x,y) or next_off_map:
-                sips["off_map"] += 1
-                break
-
-            if not d in lookup_in_map(x,y)[0]:
-                next_off_map = True
-
-            player_steps.append((x,y,d))
-
-        return x,y,d, player_steps, player_state
 
 def get_position(x,y,d):
     if (x,y,d) in position_distance_goal:
@@ -450,7 +345,7 @@ def step_player(pl,players,fell_off_map):
                 assert (False)
             racing_line = handle_10_to_12_blocked()
             sips["bonk"] += lookahead - len(racing_line)
-            print ("!!! HAPPEND HERE !!!")
+            # TODO: print ("!!! HAPPEND HERE !!!")
         else:
             while len(racing_line) == 0:
                 lookahead -= 1
@@ -1331,6 +1226,10 @@ def compute_goto_path(game_map):
             go_to_paths[0][(x,y,d)][(x,y,d)] = set()
         go_to_paths[0][(x,y,d)][(x,y,d)].add(((x,y,d),))
 
+    # Should be done in 1 step function, and enfored by others?
+    # TODO: Forced turns!
+    # TODO: Directed turns!
+
     for steps in range(0,9):
         for (x,y,d) in go_to_paths[steps]:
             for (cx,cy,cd) in go_to_paths[steps][(x,y,d)]:
@@ -1392,6 +1291,7 @@ def compute_goto_path(game_map):
                 break
             p = ((nx,ny,d),*p)
 
+    # TODO: Keep stepping (not just 1) until you fall out of map, or hit wall!
     for (x,y,d) in next_outside_map:
         nx, ny = step_dir(x,y,d)
         for steps in range(1,12+1):
@@ -1399,28 +1299,7 @@ def compute_goto_path(game_map):
                 go_to_paths[steps][(x,y,d)][(nx,ny,d)] = set()
             go_to_paths[steps][(x,y,d)][(nx,ny,d)].add(((x,y,d),(nx,ny,d))) # Step off map in any amount of steps
 
-    # for i in range(len(go_to)):
-    #     for (x,y,d) in go_to[i]:
-    #         for (nx,ny,nd) in go_to[i][(x,y,d)]:
-    #             if not (nx,ny,nd) in go_to_paths[i][(x,y,d)]:
-    #                 print (((i, (x,y,d), (nx,ny,nd))))
-    #                 print ((nx,ny,nd) in next_outside_map, (nx,ny,nd) in outside_map, (nx,ny,nd) in legal_positions)
-    #                 print ((x,y,d) in next_outside_map, (x,y,d) in outside_map, (x,y,d) in legal_positions)
-    #                 assert ((nx,ny,nd) in go_to_paths[i][(x,y,d)])
-
     return legal_positions, outside_map, next_outside_map, go_to_paths
-
-
-# def racing_line(game_map, position_distance, ):
-#     lookahead = 2
-#     from_to = [((x,y,d),sorted(map(lambda x: (position_distance[x],x), filter(lambda x: x in position_distance, go_to[lookahead][(x,y,d)])))) for (x,y,d) in go_to[lookahead]]
-
-#     # Exclude large things from list
-#     from_to_new = [((x,y,d), list((((v + 1 + max(l)[0] if v < lookahead else v),o) for v,o in l) if len(l) > 0 and max(l)[0] - min(l)[0] > lookahead else l)) for (x,y,d),l in from_to]
-
-#     racing_line = {(x,y,d): list(filter(lambda x: x[0] == min(l)[0], l)) for (x,y,d), l in from_to_new}
-
-#     return go_to
 
 def compute_comes_from(go_to_paths):
     comes_from = [{} for i in range(12+1)]
@@ -1432,8 +1311,8 @@ def compute_comes_from(go_to_paths):
                 comes_from[steps][(nx,ny,nd)].add((x,y,d))
     return comes_from
 
-game_map, players, start_line, mid_point = rtfm_map()
-# game_map, players, start_line, mid_point = loop_map()
+# game_map, players, start_line, mid_point = rtfm_map()
+game_map, players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = clover_map()
 # game_map, players, start_line, mid_point = tight_clover_map()
 # game_map, players, start_line, mid_point = pod_racing_map()
@@ -1444,7 +1323,6 @@ legal_positions, outside_map, next_outside_map, go_to_paths = compute_goto_path(
 comes_from = compute_comes_from(go_to_paths)
 position_distance_goal     = bfs_distance(game_map, start_line, comes_from)
 position_distance_midpoint = bfs_distance(game_map,  mid_point, comes_from)
-# go_to = racing_line(game_map, comes_from, position_distance, valid_next_outside_map, legal_positions)
 
 scale, (cx, cy) = compute_scale_and_center()
 
@@ -1463,32 +1341,20 @@ pre_draw(m,game_map, cx, cy, scale)
 #         for yj in range(-3,3+1):
 #             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
 
-# for i,j,d in {(1,2,5)}:
-#     xi, yi = hex_coord(i, j, cx, cy, scale)
-#     for xj in range(-3,3+1):
-#         for yj in range(-3,3+1):
-#             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (0,200,0))
-
-# for i,j,d in {(0,3,4),(1,2,4)}:
-#     xi, yi = hex_coord(i, j, cx, cy, scale)
-#     for xj in range(-3,3+1):
-#         for yj in range(-3,3+1):
-#             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (0,0,200))
-
 frame = save_map(np.array(m,dtype=np.uint8), f'Maps/000_map.png', [], (0, []), scale, out_of_map_counter) # players
 frames.append(frame)
-
-# exit()
 
 drinking = [0 for p in players]
 moves = [0 for p in players]
 
+verbose = False
 iters = 0
 total_rounds = 1_000_000
 while (iters < total_rounds):
     iters += 1
 
-    print(f'\nframe {iters:03d}.png')
+    if verbose or iters % 5000 == 0:
+        print(f'\nframe {iters:03d}.png')
     for pl,((x,y),d,g,player_state,rounds) in enumerate(players):
         players_steps, sips, steps = step_player(pl,players,fell_off_map)
 
@@ -1502,7 +1368,8 @@ while (iters < total_rounds):
             sips["no_sips"] = 1
             total_sips = 1
 
-        print (sips)
+        if verbose:
+            print (sips)
 
         drinking[pl] += total_sips
         for opl in range(len(players)):
@@ -1510,13 +1377,18 @@ while (iters < total_rounds):
 
         moves[pl] += 1
 
-        if iters < 20:
+        if iters < 0:
             filename = f'Maps/{iters:03d}_{pl:02d}_a_map.png'
             frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, players_steps), scale,out_of_map_counter)
             if iters < 10: frames.append(frame)
             filename = f'Maps/{iters:03d}_{pl:02d}_b_map.png'
             frame = save_map(np.array(m,dtype=np.uint8),filename, players, (pl, []), scale,out_of_map_counter)
             if iters < 10: frames.append(frame)
+
+    # # Stop after n - rounds
+    # if all(rounds > 1 for (_,_,_,_,rounds) in players):
+    #     print ("Frames:", iters)
+    #     break
 
 print (out_of_map_counter)
 
