@@ -205,7 +205,12 @@ class GameLogic:
 
         fell_off_map[pl] = sips["off_map"]
 
-        return player_steps, sips, steps
+        total_sips = sips["turn"] + (sips["gas"]-2 if sips["gas"] > 2 else 0) + 5.5 * sips["off_map"] + sips["bonk"] + 11 * sips["gear_box"] + sips["start_last"] + sips["end_first"] + sips["halfway_cheer"] + sips["goal_cheer"] + sips["koblingsfejl"]
+        if total_sips == 0:
+            sips["no_sips"] = 1
+            total_sips = 1
+
+        return player_steps, sips, steps, total_sips
 
     # Distance to goal:
     def bfs_distance(self, start):

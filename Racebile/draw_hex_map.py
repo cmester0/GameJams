@@ -150,7 +150,7 @@ class DrawHexMap:
             self.draw_circle(xi, yi, self.scale // 3 + 2 * pl + 1, color)
             self.draw_circle(xi, yi, self.scale // 3 - 2 * pl - 1, color)
 
-            self.draw_hex_dir(xi, yi, d, scale, color)
+            self.draw_hex_dir(xi, yi, d, color)
 
         # Players
         for pl, ((i,j),d,_,_,_) in enumerate(players):
@@ -172,7 +172,7 @@ class DrawHexMap:
             self.draw_circle(xi, yi, self.scale // 3 + 2 * pl + 1, color)
             self.draw_circle(xi, yi, self.scale // 3 - 2 * pl - 1, color)
 
-            self.draw_hex_dir(xi, yi, d, self.scale, color)
+            self.draw_hex_dir(xi, yi, d, color)
 
         # Players
         fell_off_total = max([fell_off_map[(x,y)] for x, y in fell_off_map] + [1])
