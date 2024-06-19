@@ -16,14 +16,12 @@ class GameLogic:
 
         self.legal_positions, self.outside_map, self.next_outside_map, self.go_to_paths = None, None, None, None
         self.compute_goto_path()
+
         self.comes_from = None
         self.compute_comes_from()
 
         self.position_distance_goal     = self.bfs_distance(self.start_line)
         self.position_distance_midpoint = self.bfs_distance(self.mid_point)
-
-        # Running logic!
-        self.blocked = set()
 
     def step_dir(self,x,y,d):
         if d == 0:
@@ -82,7 +80,7 @@ class GameLogic:
             ox, oy = self.step_dir(x,y,(d+3)%6)
             return min((self.position_distance_goal[(ox,oy,d)],d) for d in range(6) if (ox,oy,d) in self.position_distance_goal)[1]
 
-    def step_player(self,pl,players,fell_off_map):
+    def step_player(self,pl,players,fell_off_map,blocked):
         (x,y),d,g,player_state,rounds = players[pl]
 
         if not self.lookup_in_map(x,y) is None and 2 in self.lookup_in_map(x,y)[1]:
@@ -90,16 +88,28 @@ class GameLogic:
         else:
             ng = g + 1 if g < 3 else g # TODO: Strategy
 
-        sips = {"turn": 0, "off_map": 0, "gas": 0, "bonk": 0, "gear_box": 0, "start_last": 0, "end_first": 0, "halfway_cheer": 0, "goal_cheer": 0, "koblingsfejl": 0, "no_sips": 0}
+        sips = {
+            "turn": 0,
+            "off_map": 0,
+            "gas": 0,
+            "bonk": 0,
+            "gear_box": 0,
+            "start_last": 0,
+            "end_first": 0,
+            "halfway_cheer": 0,
+            "goal_cheer": 0,
+            "koblingsfejl": 0,
+            "no_sips": 0
+        }
 
         steps = [random.randint(1,4) for i in range(ng)]
         sips["gas"] = sum(geom.rvs(2/3,size=ng))-ng
 
         player_steps = []
-
+        
         if fell_off_map[pl]:
             # TODO: Drink?
-            if self.step_dir(x,y,(d+3)%6) in self.blocked:
+            if self.step_dir(x,y,(d+3)%6) in blocked:
                 sips["off_map"] = 1
             else:
                 player_steps.append((x,y,d))
@@ -118,8 +128,8 @@ class GameLogic:
             ret_val = ((x,y),d,ng,player_state,rounds)
         else:
 
-            if (x,y) in self.blocked:
-                self.blocked.remove((x,y))
+            if (x,y) in blocked:
+                blocked.remove((x,y))
 
             sips["koblingsfejl"] = len(list(filter(lambda x: x == 1, steps)))
 
@@ -131,7 +141,7 @@ class GameLogic:
                 use_goal = True
                 for (nx,ny,nd) in self.go_to_paths[lookahead][(x,y,d)]:
                     for p in self.go_to_paths[lookahead][(x,y,d)][nx,ny,nd]:
-                        if any(b in map(lambda x: (x[0],x[1]), [*p]) for b in self.blocked):
+                        if any(b in map(lambda x: (x[0],x[1]), [*p]) for b in blocked):
                             continue
 
                         if (nx,ny,nd) in self.position_distance_goal:
@@ -156,7 +166,7 @@ class GameLogic:
                         assert (len(self.go_to_paths[lookahead][(x,y,d)][(nx,ny,nd)]) == 1)
                         for p in self.go_to_paths[lookahead][(x,y,d)][(nx,ny,nd)]:
                             pl = [*p]
-                            while any(b in map(lambda x: (x[0],x[1]), pl) for b in self.blocked):
+                            while any(b in map(lambda x: (x[0],x[1]), pl) for b in blocked):
                                 pl = pl[:-1]
                                 return [(None,(nx,ny,nd),pl)]
                     assert (False)
@@ -178,8 +188,8 @@ class GameLogic:
             if len([*racing_line[0][2]]) < sum(steps):
                 blockers = list(filter(lambda x: x, (opl != pl and (x,y) == self.step_dir(px,py,pd) for opl,((x,y),d,_,_,r) in enumerate(players))))
                 if len(blockers) == 1 and (not self.lookup_in_map(*self.step_dir(px,py,pd)) is None and 3 in self.lookup_in_map(*self.step_dir(px,py,pd))[1]):
-                    if self.step_dir(px,py,pd) in self.blocked:
-                        self.blocked.remove(self.step_dir(px,py,pd)) # Unflip player
+                    if self.step_dir(px,py,pd) in blocked:
+                        blocked.remove(self.step_dir(px,py,pd)) # Unflip player
 
             sips["off_map"] = int(not ((px, py, pd) in self.legal_positions or (px, py, pd) in self.next_outside_map))
 
@@ -201,10 +211,9 @@ class GameLogic:
 
         if (not self.lookup_in_map(*ret_val[0]) is None and 3 in self.lookup_in_map(*ret_val[0])[1]) or any(opl != pl and (x,y) == ret_val[0] for opl,((x,y),d,_,_,r) in enumerate(players)):
             if not (*ret_val[0],ret_val[1]) in self.outside_map:
-                self.blocked.add(ret_val[0])
+                blocked.add(ret_val[0])
 
         fell_off_map[pl] = sips["off_map"]
-
         total_sips = sips["turn"] + (sips["gas"]-2 if sips["gas"] > 2 else 0) + 5.5 * sips["off_map"] + sips["bonk"] + 11 * sips["gear_box"] + sips["start_last"] + sips["end_first"] + sips["halfway_cheer"] + sips["goal_cheer"] + sips["koblingsfejl"]
         if total_sips == 0:
             sips["no_sips"] = 1

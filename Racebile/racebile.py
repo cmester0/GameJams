@@ -7,12 +7,12 @@ from draw_hex_map import *
 from run_game import *
 
 # game_map, players, start_line, mid_point = rtfm_map()
-game_map, players, start_line, mid_point = loop_map()
+game_map, orig_players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = clover_map()
 # game_map, players, start_line, mid_point = tight_clover_map()
 # game_map, players, start_line, mid_point = pod_racing_map()
 
-players = players[:8]
+players = list(orig_players[:1])
 
 drawing = DrawHexMap(2000, 2000, game_map)
 
@@ -29,19 +29,25 @@ out_of_map_counter = {}
 
 drawing.save_map( f'Maps/000_map.png', [], (0, []), out_of_map_counter) # players
 
+# Running logic!
+blocked = set()
 drinking = [0 for p in players]
 moves = [0 for p in players]
 
+average_rounds = []
+
 verbose = False
 iters = 0
-total_rounds = 1_000_000
+total_rounds = 100_000
 while (iters < total_rounds):
     iters += 1
 
     if verbose or iters % 5000 == 0:
         print(f'\nframe {iters:03d}.png')
+        filename = f'Maps/{iters:03d}_{pl:02d}_b_map.png'
+        drawing.save_map(filename, players, (0, []),out_of_map_counter)
     for pl,((x,y),d,g,player_state,rounds) in enumerate(players):
-        players_steps, sips, steps, total_sips = logic.step_player(pl,players,fell_off_map)
+        players_steps, sips, steps, total_sips = logic.step_player(pl,players,fell_off_map,blocked)
 
         if sips["off_map"]:
             ox,oy = players[pl][0]
@@ -58,11 +64,26 @@ while (iters < total_rounds):
         if verbose:
             print (sips)
 
-        if iters < 10:
+        if iters < 0:
             filename = f'Maps/{iters:03d}_{pl:02d}_a_map.png'
             drawing.save_map(filename, players, (pl, players_steps),out_of_map_counter)
             filename = f'Maps/{iters:03d}_{pl:02d}_b_map.png'
             drawing.save_map(filename, players, (pl, []),out_of_map_counter)
+
+        # if all(rounds > 1 for _,_,_,_,rounds in players): # Any , All
+        #     players = list(orig_players[:len(players)])
+        #     # logic = GameLogic(game_map, start_line, mid_point)
+        #     fell_off_map = [False for p in players]
+        #     drinking = [0 for p in players]
+        #     moves = [0 for p in players]
+        #     blocked = set()
+
+        #     average_rounds.append(iters)
+        #     print (len(average_rounds), iters, min(average_rounds), max(average_rounds), sum(average_rounds)/len(average_rounds))
+        #     if len(average_rounds) > 10000:
+        #         exit()
+        #     iters = 0
+        #     break
 
 print (out_of_map_counter)
 
