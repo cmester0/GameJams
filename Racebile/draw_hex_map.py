@@ -87,6 +87,18 @@ class DrawHexMap:
         for i in range(360):
             self.m[round(xi + radius * cos(i / 360 * 2 * pi))][round(yi + radius * sin(i / 360 * 2 * pi))] = color
 
+    def draw_grid(self, x_min, x_max, y_min, y_max):
+        # Grid
+        for i in range(x_min, x_max+1):
+            for j in range(y_min, y_max+1):
+                xi, yi = self.hex_coord(i, j)
+
+                if not (self.scale <= xi < self.width-self.scale and self.scale <= yi < self.width-self.scale):
+                    continue
+
+                color = (255, 255, 255)
+                self.draw_hex(xi, yi, color)
+
     def pre_draw(self):
         raw_coords = [(xi, yi) for xi, yi in self.game_map]
         xm = list(map(lambda x: x[0], raw_coords))
@@ -96,15 +108,7 @@ class DrawHexMap:
         y_max, y_min = (max(ym), min(ym))
 
         # Grid
-        for i in range(x_min-1, x_max+1+1):
-            for j in range(y_min-1, y_max+1+1):
-                xi, yi = self.hex_coord(i, j)
-
-                if not (self.scale <= xi < self.width-self.scale and self.scale <= yi < self.width-self.scale):
-                    continue
-
-                color = (255, 255, 255)
-                self.draw_hex(xi, yi, color)
+        self.draw_grid(x_min-1, x_max+1, y_min-1, y_max+1)
 
         # Map
         for (i,j) in self.game_map:
