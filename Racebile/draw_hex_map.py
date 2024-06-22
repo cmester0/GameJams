@@ -1,4 +1,4 @@
-from math import cos, sin, pi, floor, ceil, inf
+from math import cos, sin, pi, floor, ceil, inf, fmod
 import colorsys
 
 from PIL import Image
@@ -9,18 +9,30 @@ from threading import Thread
 import numpy as np
 
 class DrawHexMap:
-    def __init__(self, width, height, game_map):
+    def __init__(self, width, height):
         self.width = width
         self.height = height
-        self.game_map = game_map
+        self.game_map = None
 
         self.scale = None
         self.cx = None
         self.cy = None
-        self.compute_scale_and_center()
 
         self.frames = []
         self.m = np.array([[(0, 0, 0) for j in range(self.width)] for i in range(self.height)],dtype=np.uint8)
+        self.m_init = None
+
+
+        self.star_color = (255, 0, 0)
+
+        # self.hsv_default = ( 51.1/360,1.0,0.75) # 0
+        # self.hsv_init    = ( 51.1/360,1.0,0.5 ) # 1
+        # self.hsv_gear    = (210.6/360,1.0,0.75) # 2
+        # self.hsv_star    = (  1.9/360,1.0,0.75) # 3
+
+    def set_map(self, game_map):
+        self.game_map = game_map
+        self.compute_scale_and_center()
         self.pre_draw()
         self.m_init = np.array(self.m)
 
@@ -121,7 +133,9 @@ class DrawHexMap:
                 self.draw_filled_small_hex(xi, yi, color)
 
             for d in dirs:
-                if 4 in t or 5 in t:
+                if 4 in t:
+                    self.draw_hex_dir(xi, yi, d, (100,100,100))
+                elif 5 in t:
                     self.draw_hex_dir(xi, yi, d, (0,0,0))
                 else:
                     self.draw_hex_dir(xi, yi, d, (255,255,255))
@@ -213,3 +227,159 @@ class DrawHexMap:
         self.frames.append(img)
 
         return img
+
+    def inverse_raw_hax_coord(self, xi, yi):
+        xs, ys = 3 * cos(pi/3), sin(pi/3)
+        x = xi / xs
+        y = (yi / ys - x) / 2
+        return x, y
+
+    def inverse_hex_coord(self, xi, yi):
+        xi = (xi - self.width // 2) / self.scale + self.cx
+        yi = (yi - self.height //2) / self.scale + self.cy
+        x, y = self.inverse_raw_hax_coord(xi,yi)
+        return x, y
+
+    def load_map(self, filename):
+        # self.draw_map(players, player_steps, fell_off_map)
+
+        img = Image.open(filename)
+        img.load()
+        img = img.rotate(-90)
+        self.m = np.array(np.asarray(img)) # np.array([[(0, 0, 0) for j in range(self.width)] for i in range(self.height)],dtype=np.uint8)
+
+        extra_x = 1
+        extra_y = 0
+
+        for y in range(self.height):
+            for x in range(self.width):
+                if self.m[x][y][0] != 0:
+                    start_of_some_hex = [x, y]
+                    break
+            else:
+                continue
+
+        self.scale = 0
+        while (self.m[start_of_some_hex[0] + 1 + self.scale][start_of_some_hex[1]][0] != 0):
+            self.scale += 1
+
+        self.cx = self.width //2/self.scale + fmod(start_of_some_hex[0] + 1 + self.scale / 2, self.scale) / self.scale # +0.45
+        self.cy = self.height//2/self.scale + fmod(start_of_some_hex[1] - 2 + self.scale / 2, self.scale) / self.scale # +0.75
+
+        s_xi, s_yi = self.inverse_hex_coord(start_of_some_hex[0], start_of_some_hex[1])
+
+        self.game_map = {}
+
+        for i in range(-int(s_xi), 2*(int(s_xi)+1)+1):
+            for j in range(-int(s_yi), 2*(int(s_yi)+1)+1):
+                xi, yi = self.hex_coord(i, j)
+
+                if not (self.scale <= xi < self.width-self.scale and self.scale <= yi < self.width-self.scale):
+                    continue
+
+                # Outer not zero
+                r,g,b = self.m[int(xi - 0.2 * self.scale)][int(yi + 0.7 * self.scale)] # Sample from outer ring of color
+                if r != 0 or g != 0 or b != 0:
+                    # Outer
+                    h,s,v = colorsys.rgb_to_hsv(r,g,b)
+
+                    values = []
+
+                    print (v)
+                    if (0.49*255 <= v <= 0.51*255):
+                        values.append(1)
+
+                    if (209.6/360 <= h <= 211.6/360):
+                        values.append(2)
+
+                    # Inner Ring
+                    r,g,b = self.m[int(xi - 0.2 * self.scale)][int(yi + 0.25 * self.scale)] # Sample from outer ring of color
+                    h,s,v = colorsys.rgb_to_hsv(r,g,b)
+
+                    if (0.9/360 <= h <= 2.9/360):
+                        values.append(3)
+
+                    # Directions:
+                    directions = []
+                    k = self.scale*0.6 # goes to 3/4
+                    for d in range(6):
+                        rx,ry = cos(d*pi/3+pi/6)*k, sin(d*pi/3+pi/6)*k
+                        r,g,b = self.m[int(xi+rx)][int(yi+ry)]
+                        h,s,v = colorsys.rgb_to_hsv(r,g,b)
+
+                        if s == 0:
+                            if v == 100:
+                                values.append(4)
+                            if v == 0:
+                                values.append(5)
+                            directions.append(d)
+
+                    self.game_map[(i,j)] = (directions,values)
+
+                color = (255, 255, 255)
+                for k in range(-1,1+1):
+                    for l in range(-1,1+1):
+                        k = self.scale*0.6 # goes to 3/4
+                        for d in range(6):
+                            rx,ry = cos(d*pi/3+pi/6)*k, sin(d*pi/3+pi/6)*k
+                            self.m[int(xi+rx)][int(yi+ry)] = [100,255,100]
+
+        self.m_init = np.array(self.m)
+
+        self.m = np.array([[(0, 0, 0) for j in range(self.width)] for i in range(self.height)],dtype=np.uint8)
+        self.compute_scale_and_center()
+        self.pre_draw()
+        self.m_init = np.array(self.m)
+
+    def load_outline(self): # Inverse of pre_draw
+        pass
+    
+        # raw_coords = [(xi, yi) for xi, yi in self.game_map]
+        # xm = list(map(lambda x: x[0], raw_coords))
+        # x_max, x_min = (max(xm), min(xm))
+
+        # ym = list(map(lambda x: x[1], raw_coords))
+        # y_max, y_min = (max(ym), min(ym))
+
+        # # Grid
+        # for i in range(x_min-1, x_max+1+1):
+        #     for j in range(y_min-1, y_max+1+1):
+        #         xi, yi = self.hex_coord(i, j)
+
+        #         if not (self.scale <= xi < self.width-self.scale and self.scale <= yi < self.width-self.scale):
+        #             continue
+
+        #         color = (255, 255, 255)
+        #         self.draw_hex(xi, yi, color)
+
+        # # Map
+        # for (i,j) in self.game_map:
+        #     dirs,t = self.game_map[(i,j)]
+
+        #     xi, yi = self.hex_coord(i, j)
+
+        #     if not (self.scale <= xi <= self.width-self.scale and self.scale <= yi <= self.height-self.scale):
+        #         continue
+
+        #     h = 210.6/360 if 2 in t else 51.1/360
+        #     s = 1.0
+        #     v = 0.5 if 1 in t else 0.75
+        #     r, g, b = colorsys.hsv_to_rgb(h,s,v)
+
+        #     color = (int(r * 255), int(g * 255), int(b * 255))
+
+        #     self.draw_filled_hex(xi, yi, color)
+
+        #     if 3 in t:
+        #         h = 1.9/360
+        #         s = 1.0
+        #         v = 0.75
+        #         r, g, b = colorsys.hsv_to_rgb(h,s,v)
+        #         color = (int(r * 255), int(g * 255), int(b * 255))
+        #         self.draw_filled_small_hex(xi, yi, color)
+
+        #     for d in dirs:
+        #         if 4 in t or 5 in t:
+        #             self.draw_hex_dir(xi, yi, d, (0,0,0))
+        #         else:
+        #             self.draw_hex_dir(xi, yi, d, (255,255,255))

@@ -12,9 +12,10 @@ game_map, orig_players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = tight_clover_map()
 # game_map, players, start_line, mid_point = pod_racing_map()
 
-players = list(orig_players[:1])
+players = list(orig_players[:7])
 
-drawing = DrawHexMap(2000, 2000, game_map)
+drawing = DrawHexMap(2000, 2000)
+drawing.set_map(game_map)
 
 logic = GameLogic(game_map, start_line, mid_point)
 
@@ -70,20 +71,22 @@ while (iters < total_rounds):
             filename = f'Maps/{iters:03d}_{pl:02d}_b_map.png'
             drawing.save_map(filename, players, (pl, []),out_of_map_counter)
 
-        # if all(rounds > 1 for _,_,_,_,rounds in players): # Any , All
-        #     players = list(orig_players[:len(players)])
-        #     # logic = GameLogic(game_map, start_line, mid_point)
-        #     fell_off_map = [False for p in players]
-        #     drinking = [0 for p in players]
-        #     moves = [0 for p in players]
-        #     blocked = set()
+        if all(rounds > 1 for _,_,_,_,rounds in players): # Any , All
+            players = list(orig_players[:len(players)])
+            # logic = GameLogic(game_map, start_line, mid_point)
+            fell_off_map = [False for p in players]
+            blocked = set()
 
-        #     average_rounds.append(iters)
-        #     print (len(average_rounds), iters, min(average_rounds), max(average_rounds), sum(average_rounds)/len(average_rounds))
-        #     if len(average_rounds) > 10000:
-        #         exit()
-        #     iters = 0
-        #     break
+            # drinking = [0 for p in players]
+            # moves = [0 for p in players]
+
+            average_rounds.append(iters)
+            print (len(average_rounds), iters, min(average_rounds), max(average_rounds), sum(average_rounds)/len(average_rounds))
+            iters = 0
+            break
+
+    if len(average_rounds) > 10000:
+        break
 
 print (out_of_map_counter)
 
