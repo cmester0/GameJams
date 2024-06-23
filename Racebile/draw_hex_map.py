@@ -274,8 +274,8 @@ class DrawHexMap:
 
         self.game_map = {}
 
-        for i in range(-int(s_xi), 2*(int(s_xi)+1)+1):
-            for j in range(-int(s_yi), 2*(int(s_yi)+1)+1):
+        for i in range(-self.width // self.scale, self.width // self.scale): # -int(s_xi), 2*(int(s_xi)+1)+1):
+            for j in range(-self.height // self.scale, self.height // self.scale): # (-int(s_yi), 2*(int(s_yi)+1)+1):
                 xi, yi = self.hex_coord(i, j)
 
                 if not (self.scale <= xi < self.width-self.scale and self.scale <= yi < self.width-self.scale):
@@ -289,44 +289,48 @@ class DrawHexMap:
 
                     values = []
 
-                    print (v)
-                    if (0.49*255 <= v <= 0.51*255):
+                    if (0.45*255 <= v <= 0.55*255):
                         values.append(1)
 
-                    if (209.6/360 <= h <= 211.6/360):
+                    if (205/360 <= h <= 215/360):
                         values.append(2)
 
                     # Inner Ring
                     r,g,b = self.m[int(xi - 0.2 * self.scale)][int(yi + 0.25 * self.scale)] # Sample from outer ring of color
                     h,s,v = colorsys.rgb_to_hsv(r,g,b)
 
-                    if (0.9/360 <= h <= 2.9/360):
+                    if (0/360 <= h <= 5/360):
                         values.append(3)
 
-                    # Directions:
+                    # # Directions:
                     directions = []
-                    k = self.scale*0.6 # goes to 3/4
-                    for d in range(6):
-                        rx,ry = cos(d*pi/3+pi/6)*k, sin(d*pi/3+pi/6)*k
-                        r,g,b = self.m[int(xi+rx)][int(yi+ry)]
-                        h,s,v = colorsys.rgb_to_hsv(r,g,b)
+                    # k = self.scale*0.6 # goes to 3/4
+                    # for d in range(6):
+                    #     rx,ry = cos(d*pi/3+pi/6)*k, sin(d*pi/3+pi/6)*k
+                    #     r,g,b = self.m[int(xi+rx)][int(yi+ry)]
+                    #     h,s,v = colorsys.rgb_to_hsv(r,g,b)
 
-                        if s == 0:
-                            if v == 100:
-                                values.append(4)
-                            if v == 0:
-                                values.append(5)
-                            directions.append(d)
+                    #     if s == 0:
+                    #         if v == 100:
+                    #             values.append(4)
+                    #         if v == 0:
+                    #             values.append(5)
+                    #         directions.append(d)
 
                     self.game_map[(i,j)] = (directions,values)
 
                 color = (255, 255, 255)
+                # if not (i == 0 and j == 0):
+                #     continue
+
                 for k in range(-1,1+1):
                     for l in range(-1,1+1):
                         k = self.scale*0.6 # goes to 3/4
                         for d in range(6):
                             rx,ry = cos(d*pi/3+pi/6)*k, sin(d*pi/3+pi/6)*k
                             self.m[int(xi+rx)][int(yi+ry)] = [100,255,100]
+
+        print (len(self.game_map))
 
         self.m_init = np.array(self.m)
 
