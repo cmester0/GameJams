@@ -66,7 +66,7 @@ while (iters < total_rounds):
         if verbose:
             print (sips)
 
-        if iters < 0:
+        if iters < 100:
             filename = f'Maps/{iters:03d}_{pl:02d}_a_map.png'
             drawing.save_map(filename, players, (pl, players_steps),out_of_map_counter)
             filename = f'Maps/{iters:03d}_{pl:02d}_b_map.png'
