@@ -7,10 +7,11 @@ from draw_hex_map import *
 from run_game import *
 
 # game_map, players, start_line, mid_point = rtfm_map()
-game_map, orig_players, start_line, mid_point = loop_map()
+# game_map, orig_players, start_line, mid_point = loop_map()
 # game_map, players, start_line, mid_point = clover_map()
 # game_map, players, start_line, mid_point = tight_clover_map()
 # game_map, players, start_line, mid_point = pod_racing_map()
+game_map, orig_players, start_line, mid_point = chikane_map()
 
 players = list(orig_players[:7])
 

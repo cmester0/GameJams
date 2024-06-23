@@ -266,15 +266,28 @@ class DrawHexMap:
         self.scale = 0
         while (self.m[start_of_some_hex[0] + 1 + self.scale][start_of_some_hex[1]][0] != 0):
             self.scale += 1
+        self.scale -= 1
 
-        self.cx = self.width //2/self.scale + fmod(start_of_some_hex[0] + 1 + self.scale / 2, self.scale) / self.scale # +0.45
-        self.cy = self.height//2/self.scale + fmod(start_of_some_hex[1] - 2 + self.scale / 2, self.scale) / self.scale # +0.75
+        print()
+        print()
+        print()
+        print (self.scale)
+        print()
+        print()
+        print()
+            
+        self.cx = fmod(start_of_some_hex[0], self.scale * 2 * 3 * cos(pi/3))
+        self.cy = fmod(start_of_some_hex[1], self.scale * sin(pi/3))
 
-        s_xi, s_yi = self.inverse_hex_coord(start_of_some_hex[0], start_of_some_hex[1])
+        self.cx -= 18 * (2 * 3 * cos(pi/3))+0.0
+        self.cy -= 0.8
+        # self.cy += 10 * (self.scale * 2 * 3 * cos(pi/3))
+
+        # print ( self.hex_coord (s_xi-int(s_xi), s_yi-int(s_yi)) , self.hex_coord(0,0) )
 
         self.game_map = {}
 
-        for i in range(-self.width // self.scale, self.width // self.scale): # -int(s_xi), 2*(int(s_xi)+1)+1):
+        for i in range(0, self.width): # -int(s_xi), 2*(int(s_xi)+1)+1):
             for j in range(-self.height // self.scale, self.height // self.scale): # (-int(s_yi), 2*(int(s_yi)+1)+1):
                 xi, yi = self.hex_coord(i, j)
 
@@ -296,10 +309,13 @@ class DrawHexMap:
                         values.append(2)
 
                     # Inner Ring
-                    r,g,b = self.m[int(xi - 0.2 * self.scale)][int(yi + 0.25 * self.scale)] # Sample from outer ring of color
+                    r,g,b = self.m[int(xi)][int(yi)] # Sample from outer ring of color
+                    # r,g,b = self.m[int(xi - 0.2 * self.scale)][int(yi + 0.25 * self.scale)] # Sample from outer ring of color
                     h,s,v = colorsys.rgb_to_hsv(r,g,b)
 
-                    if (0/360 <= h <= 5/360):
+                    # Star
+                    # values.append(3)
+                    if (0.1/360 <= h <= 5/360):
                         values.append(3)
 
                     # # Directions:
@@ -319,29 +335,41 @@ class DrawHexMap:
 
                     self.game_map[(i,j)] = (directions,values)
 
+                    print ((i,j),":",(directions,values))
+
+        for i in range(-3,3+1):
+            for j in range(-3,3+1):
+                self.m[int(self.width//2+i)][int(self.height//2+j)] = [200,100,0]
+
+        for i in range(-self.width // self.scale, self.width // self.scale): # -int(s_xi), 2*(int(s_xi)+1)+1):
+            for j in range(-self.height // self.scale, self.height // self.scale): # (-int(s_yi), 2*(int(s_yi)+1)+1):
+                xi, yi = self.hex_coord(i, j)
+
+                if not (self.scale <= xi < self.width-self.scale and self.scale <= yi < self.width-self.scale):
+                    continue
+
                 color = (255, 255, 255)
                 # if not (i == 0 and j == 0):
                 #     continue
 
                 for k in range(-1,1+1):
                     for l in range(-1,1+1):
-                        k = self.scale*0.6 # goes to 3/4
-                        for d in range(6):
-                            rx,ry = cos(d*pi/3+pi/6)*k, sin(d*pi/3+pi/6)*k
-                            self.m[int(xi+rx)][int(yi+ry)] = [100,255,100]
+                        self.m[int(xi+k)][int(yi+l)] = [255,0,0]
 
-        print (len(self.game_map))
+                k = self.scale*0.6 # goes to 3/4
+                for d in range(6):
+                    rx,ry = cos(d*pi/3+pi/6)*k, sin(d*pi/3+pi/6)*k
+                    self.m[int(xi+rx)][int(yi+ry)] = [100,255,100]
 
-        self.m_init = np.array(self.m)
+        # self.m = np.array([[(0, 0, 0) for j in range(self.width)] for i in range(self.height)],dtype=np.uint8)
+        # self.compute_scale_and_center()
+        # self.pre_draw()
 
-        self.m = np.array([[(0, 0, 0) for j in range(self.width)] for i in range(self.height)],dtype=np.uint8)
-        self.compute_scale_and_center()
-        self.pre_draw()
         self.m_init = np.array(self.m)
 
     def load_outline(self): # Inverse of pre_draw
         pass
-    
+
         # raw_coords = [(xi, yi) for xi, yi in self.game_map]
         # xm = list(map(lambda x: x[0], raw_coords))
         # x_max, x_min = (max(xm), min(xm))

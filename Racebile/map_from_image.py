@@ -19,6 +19,7 @@ from run_game import *
 drawing = DrawHexMap(2000, 2000)
 drawing.load_map(input("filename:"))
 
-# self.game_map[(i,j)] = (directions,values)
+for x,y in drawing.game_map:
+    print ((x,y),drawing.game_map[(x,y)])
 
 drawing.save_map(input("output name:"),[],(0,[]),{})
