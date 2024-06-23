@@ -268,14 +268,6 @@ class DrawHexMap:
             self.scale += 1
         self.scale -= 1
 
-        print()
-        print()
-        print()
-        print (self.scale)
-        print()
-        print()
-        print()
-            
         self.cx = fmod(start_of_some_hex[0], self.scale * 2 * 3 * cos(pi/3))
         self.cy = fmod(start_of_some_hex[1], self.scale * sin(pi/3))
 
@@ -335,7 +327,7 @@ class DrawHexMap:
 
                     self.game_map[(i,j)] = (directions,values)
 
-                    print ((i,j),":",(directions,values))
+                    print ((i,j),":",(directions,values),",")
 
         for i in range(-3,3+1):
             for j in range(-3,3+1):
@@ -361,9 +353,9 @@ class DrawHexMap:
                     rx,ry = cos(d*pi/3+pi/6)*k, sin(d*pi/3+pi/6)*k
                     self.m[int(xi+rx)][int(yi+ry)] = [100,255,100]
 
-        # self.m = np.array([[(0, 0, 0) for j in range(self.width)] for i in range(self.height)],dtype=np.uint8)
-        # self.compute_scale_and_center()
-        # self.pre_draw()
+        self.m = np.array([[(0, 0, 0) for j in range(self.width)] for i in range(self.height)],dtype=np.uint8)
+        self.compute_scale_and_center()
+        self.pre_draw()
 
         self.m_init = np.array(self.m)
 
