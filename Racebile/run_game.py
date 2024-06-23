@@ -55,7 +55,7 @@ class GameLogic:
                 d = cm[0][player_state[(x,y)]]
             else:
                 d = cm[0][0]
-        return d, player_state
+        return d
 
     def step_player(self,pl,players,fell_off_map,blocked):
         (x,y),d,g,player_state,rounds = players[pl]
@@ -93,7 +93,7 @@ class GameLogic:
             else:
                 player_steps.append((x,y,d))
                 x,y = self.step_dir(x,y,(d+3)%6)
-                d, player_state = self.get_map_dirs(x, y, player_state)
+                d = self.get_map_dirs(x, y, player_state)
                 player_steps.append((x,y,d))
 
         # TODO: Better!
@@ -139,13 +139,18 @@ class GameLogic:
                         if any(b in map(lambda x: (x[0],x[1]), [*p]) for b in blocked):
                             continue
 
+                        max_dist = []
                         goal_dist = self.bfs_to_pos([(nx,ny,nd)], self.start_line, temp_player_state)
+                        if goal_dist != inf:
+                            max_dist.append(goal_dist)
                         mid_dist = self.bfs_to_pos([(nx,ny,nd)], self.mid_point , temp_player_state)
+                        if mid_dist != inf:
+                            max_dist.append(mid_dist)
+                        if len(max_dist) == 0:
+                            max_dist.append(inf)
+
                         l.append((
-                            max(
-                                0 if goal_dist == inf else goal_dist, # start line dist
-                                0 if mid_dist == inf else mid_dist # mid point dist
-                            ),
+                            max(max_dist),
                             (nx,ny,nd),
                             p))
                         # if tps_tuple in self.position_distance_goal and self.position_distance_goal[tps_tuple] < 12:
@@ -214,19 +219,11 @@ class GameLogic:
             #     self.get_position_goal(*midpoint_pos,self.player_state_mid) <
             #     self.get_position_goal(px,py,pd,player_state))
 
-            # print ((( x, y), ( x, y) in self.game_map, ( x, y, d,tuple([o_player_state[(x,y)] for (x,y) in o_player_state])) in self.position_distance_goal),
-            #        ((px,py), (px,py) in self.game_map, (px,py,pd,tuple([  player_state[(x,y)] for (x,y) in   player_state])) in self.position_distance_goal))
-
-            # if (   self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state)
-            #        <= len([*racing_line[0][2]][1:])):
-            #     print (self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state) + self.bfs_to_pos(self.start_line,(px,py,pd),self.player_state_start),
-            #            len([*racing_line[0][2]][1:]),
-            #            self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state)
-            #            <= len([*racing_line[0][2]][1:]))
-
+            print (self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state) + self.bfs_to_pos(self.start_line,(px,py,pd),self.player_state_start))
+            
             nrounds = rounds + int(
-                self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state) <= len([*racing_line[0][2]][1:])
-                # self.bfs_to_pos([( x, y, d)],[(px,py,pd)],o_player_state)
+                self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state) + self.bfs_to_pos(self.start_line,(px,py,pd),self.player_state_start) <=
+                len([*racing_line[0][2]][1:])
             )
             # print ("ROUND:", nrounds)
             ret_val = ((px, py), pd, ng, player_state, nrounds)
@@ -263,44 +260,55 @@ class GameLogic:
         stk = [(0,x,y,d,dict(player_state)) for x,y,d in start]
 
         if (tuple(start), tuple(goal)) in self.bfs_to_dict:
-            return self.bfs_to_dict[(tuple(start), tuple(goal))]
+            return self.bfs_to_dict[(tuple(start), tuple(goal), tuple([player_state[(x,y)] for (x,y) in player_state]))]
 
         while len(stk) > 0:
             dist,x,y,d,ps = heapq.heappop(stk)
 
-            # Handle forced paths correctly!
-            if (x, y) in ps:
-                cm = self.lookup_in_map(x,y)
-                if cm[0][ps[(x,y)]] == d:
-                    ps[(x,y)] = (1 + ps[(x,y)]) % len(cm[0])
-                else:
-                    # print ("invalid!", (x,y,d), tuple([ps[(x,y)] for (x,y) in ps]))
-                    continue
-
-            ps_tuple = tuple([ps[(x,y)] for (x,y) in ps])
-
-            if (x,y,d,ps_tuple) in position_distance:
-                continue
-
-            if not (x,y) in self.game_map or not d in self.game_map[(x,y)][0]: # Unreachable??
-                nx,ny = self.step_dir(x,y,(d+3)%6)
-                for nd in self.game_map[(nx,ny)][0]:
-                    heapq.heappush(stk,(dist+1,nx,ny,nd,dict(ps)))
-                continue
-
-            if not (x,y,d,ps_tuple) in position_distance:
-                position_distance[(x,y,d,ps_tuple)] = dist
-
-            assert (d in self.game_map[(x,y)][0])
+            print (dist, x, y, d)
 
             if (x,y,d) in goal: # TODO: include d?
-                self.bfs_to_dict[(tuple(start), tuple(goal))] = dist
+                print ("in goaL?")
+                self.bfs_to_dict[(tuple(start), tuple(goal), tuple([player_state[(x,y)] for (x,y) in player_state]))] = dist
                 return dist
+
+            # # Handle forced paths correctly!
+            # if (x, y) in ps:
+            #     cm = self.lookup_in_map(x,y)
+            #     if cm[0][ps[(x,y)]] == d:
+            #         ps[(x,y)] = (1 + ps[(x,y)]) % len(cm[0])
+            #     else:
+            #         # print ("invalid!", (x,y,d), tuple([ps[(x,y)] for (x,y) in ps]))
+            #         continue
+
+            # ps_tuple = tuple([ps[(x,y)] for (x,y) in ps])
+
+            # if (x,y,d,ps_tuple) in position_distance:
+            #     continue
+
+            # if not (x,y) in self.game_map or not d in self.game_map[(x,y)][0]: # Unreachable??
+            #     nx,ny = self.step_dir(x,y,(d+3)%6)
+            #     for nd in self.game_map[(nx,ny)][0]:
+            #         heapq.heappush(stk,(dist+1,nx,ny,nd,dict(ps)))
+            #     continue
+
+            if not (x,y,d) in self.game_map:
+                continue
+
+            nx, ny = step_dir(x,y,d)
+            for nd in self.game_map[(nx,ny)]:
+                heapq.heappush(stk,(dist+1,nx,ny,nd,dict(ps)))
+
+            # if not (x,y,d,ps_tuple) in position_distance:
+            #     position_distance[(x,y,d,ps_tuple)] = dist
+
+            # assert (d in self.game_map[(x,y)][0])
 
             for nx,ny,nd in self.go_to_paths[1][(x,y,d)]:
                 heapq.heappush(stk,(dist+1,nx,ny,nd,dict(ps)))
 
-        # assert False, f"({start}, {goal})"
+        # print (f"({start}, {goal})")
+        assert False, f"({start}, {goal}, {tuple(player_state[(x,y)] for (x,y) in player_state)})"
         # exit() # Should always be a distance
         return inf
 
