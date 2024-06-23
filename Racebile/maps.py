@@ -952,18 +952,22 @@ def chikane_map():
     }
     start_line = [(29, -17), (30, -17)]
     mid_point = [(39, -19), (39, -18)]
+
+    forced_dir = {(30, -7): 0, (35, -8): 0} # Start from -1... weird interaction (could be autogened, assuming order correct)
+
     players = [
-        ((29, -16), 5, 0, {}, 0),
-        ((29, -17), 5, 0, {}, 0),
-        ((28, -15), 5, 0, {}, 0),
-        ((28, -16), 5, 0, {}, 0),
-        ((27, -14), 5, 0, {}, 0),
-        ((27, -15), 5, 0, {}, 0),
-        ((26, -13), 5, 0, {}, 0),
-        ((26, -14), 5, 0, {}, 0),
-        ((25, -12), 5, 0, {}, 0),
-        ((25, -13), 5, 0, {}, 0),
-        ((24, -11), 5, 0, {}, 0),
-        ((24, -12), 5, 0, {}, 0),
+        ((29, -16), 5, 0, dict(forced_dir), 0),
+        ((29, -17), 5, 0, dict(forced_dir), 0),
+        ((28, -15), 5, 0, dict(forced_dir), 0),
+        ((28, -16), 5, 0, dict(forced_dir), 0),
+        ((27, -14), 5, 0, dict(forced_dir), 0),
+        ((27, -15), 5, 0, dict(forced_dir), 0),
+        ((26, -13), 5, 0, dict(forced_dir), 0),
+        ((26, -14), 5, 0, dict(forced_dir), 0),
+        ((25, -12), 5, 0, dict(forced_dir), 0),
+        ((25, -13), 5, 0, dict(forced_dir), 0),
+        ((24, -11), 5, 0, dict(forced_dir), 0),
+        ((24, -12), 5, 0, dict(forced_dir), 0),
     ]
+
     return game_map, players, start_line, mid_point

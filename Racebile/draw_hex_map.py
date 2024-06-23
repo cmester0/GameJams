@@ -22,7 +22,6 @@ class DrawHexMap:
         self.m = np.array([[(0, 0, 0) for j in range(self.width)] for i in range(self.height)],dtype=np.uint8)
         self.m_init = None
 
-
         self.star_color = (255, 0, 0)
 
         # self.hsv_default = ( 51.1/360,1.0,0.75) # 0

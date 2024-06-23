@@ -106,7 +106,7 @@ class GameLogic:
         sips["gas"] = sum(geom.rvs(2/3,size=ng))-ng
 
         player_steps = []
-        
+
         if fell_off_map[pl]:
             # TODO: Drink?
             if self.step_dir(x,y,(d+3)%6) in blocked:
@@ -140,7 +140,22 @@ class GameLogic:
                 l = []
                 use_goal = True
                 for (nx,ny,nd) in self.go_to_paths[lookahead][(x,y,d)]:
+                    # TODO: Handle double loops?
                     for p in self.go_to_paths[lookahead][(x,y,d)][nx,ny,nd]:
+                        valid_forced_dir = True
+                        temp_player_state = dict(player_state)
+                        for (fd_x,fd_y,fd_d) in [*p][1:]:
+                            if (fd_x, fd_y) in temp_player_state:
+                                cm = self.lookup_in_map(fd_x,fd_y)
+                                if cm[0][temp_player_state[(fd_x,fd_y)]] == fd_d:
+                                    temp_player_state[(fd_x,fd_y)] = (1 + temp_player_state[(fd_x,fd_y)]) % len(cm[0])
+                                else:
+                                    valid_forced_dir = False
+                                    break
+
+                        if not valid_forced_dir:
+                            continue
+
                         if any(b in map(lambda x: (x[0],x[1]), [*p]) for b in blocked):
                             continue
 
@@ -181,6 +196,13 @@ class GameLogic:
 
             px,py,pd = racing_line[0][1]
             player_steps = player_steps + [*racing_line[0][2]]
+
+            for (fd_x,fd_y,fd_d) in [*racing_line[0][2]][1:]:
+                if (fd_x, fd_y) in player_state:
+                    cm = self.lookup_in_map(fd_x,fd_y)
+                    if cm[0][player_state[(fd_x,fd_y)]] == fd_d:
+                        player_state[(fd_x,fd_y)] = (1 + player_state[(fd_x,fd_y)]) % len(cm[0])
+
             # End of strategy
 
             sips["turn"] = sum([0 if (d1 == d2) else 1 for (_,_,d1), (_,_,d2) in zip([*racing_line[0][2]], [*racing_line[0][2]][1:])]) if sum(steps) >= 7 else 0

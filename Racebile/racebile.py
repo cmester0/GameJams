@@ -66,25 +66,26 @@ while (iters < total_rounds):
         if verbose:
             print (sips)
 
-        if iters < 100:
+        if iters < 10:
+            print (f"save {iters:03d}, player {pl:02d}")
             filename = f'Maps/{iters:03d}_{pl:02d}_a_map.png'
             drawing.save_map(filename, players, (pl, players_steps),out_of_map_counter)
             filename = f'Maps/{iters:03d}_{pl:02d}_b_map.png'
             drawing.save_map(filename, players, (pl, []),out_of_map_counter)
 
-        if all(rounds > 1 for _,_,_,_,rounds in players): # Any , All
-            players = list(orig_players[:len(players)])
-            # logic = GameLogic(game_map, start_line, mid_point)
-            fell_off_map = [False for p in players]
-            blocked = set()
+        # if all(rounds > 1 for _,_,_,_,rounds in players): # Any , All
+        #     players = list(orig_players[:len(players)])
+        #     # logic = GameLogic(game_map, start_line, mid_point)
+        #     fell_off_map = [False for p in players]
+        #     blocked = set()
 
-            # drinking = [0 for p in players]
-            # moves = [0 for p in players]
+        #     # drinking = [0 for p in players]
+        #     # moves = [0 for p in players]
 
-            average_rounds.append(iters)
-            print (len(average_rounds), iters, min(average_rounds), max(average_rounds), sum(average_rounds)/len(average_rounds))
-            iters = 0
-            break
+        #     average_rounds.append(iters)
+        #     print (len(average_rounds), iters, min(average_rounds), max(average_rounds), sum(average_rounds)/len(average_rounds))
+        #     iters = 0
+        #     break
 
     if len(average_rounds) > 10000:
         break
