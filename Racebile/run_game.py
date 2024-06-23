@@ -139,11 +139,12 @@ class GameLogic:
                         if any(b in map(lambda x: (x[0],x[1]), [*p]) for b in blocked):
                             continue
 
-                        tps_tuple = (nx,ny,nd,tuple([temp_player_state[(x,y)] for (x,y) in temp_player_state]))
+                        goal_dist = self.bfs_to_pos([(nx,ny,nd)], self.start_line, temp_player_state)
+                        mid_dist = self.bfs_to_pos([(nx,ny,nd)], self.mid_point , temp_player_state)
                         l.append((
                             max(
-                                self.bfs_to_pos([(nx,ny,nd)], self.start_line, temp_player_state), # start line dist
-                                self.bfs_to_pos([(nx,ny,nd)], self.mid_point , temp_player_state) # mid point dist
+                                0 if goal_dist == inf else goal_dist, # start line dist
+                                0 if mid_dist == inf else mid_dist # mid point dist
                             ),
                             (nx,ny,nd),
                             p))
@@ -216,12 +217,17 @@ class GameLogic:
             # print ((( x, y), ( x, y) in self.game_map, ( x, y, d,tuple([o_player_state[(x,y)] for (x,y) in o_player_state])) in self.position_distance_goal),
             #        ((px,py), (px,py) in self.game_map, (px,py,pd,tuple([  player_state[(x,y)] for (x,y) in   player_state])) in self.position_distance_goal))
 
-            print (
-            nrounds = rounds + int(   self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state)
-                                   +  self.bfs_to_pos(self.start_line,(px,py,pd),self.player_state_start)
-                                   == len([*racing_line[0][2]][1:])
-                                      # self.bfs_to_pos([( x, y, d)],[(px,py,pd)],o_player_state)
-                                   )
+            # if (   self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state)
+            #        <= len([*racing_line[0][2]][1:])):
+            #     print (self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state) + self.bfs_to_pos(self.start_line,(px,py,pd),self.player_state_start),
+            #            len([*racing_line[0][2]][1:]),
+            #            self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state)
+            #            <= len([*racing_line[0][2]][1:]))
+
+            nrounds = rounds + int(
+                self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state) <= len([*racing_line[0][2]][1:])
+                # self.bfs_to_pos([( x, y, d)],[(px,py,pd)],o_player_state)
+            )
             # print ("ROUND:", nrounds)
             ret_val = ((px, py), pd, ng, player_state, nrounds)
 
@@ -277,6 +283,9 @@ class GameLogic:
                 continue
 
             if not (x,y) in self.game_map or not d in self.game_map[(x,y)][0]: # Unreachable??
+                nx,ny = self.step_dir(x,y,(d+3)%6)
+                for nd in self.game_map[(nx,ny)][0]:
+                    heapq.heappush(stk,(dist+1,nx,ny,nd,dict(ps)))
                 continue
 
             if not (x,y,d,ps_tuple) in position_distance:
@@ -291,6 +300,8 @@ class GameLogic:
             for nx,ny,nd in self.go_to_paths[1][(x,y,d)]:
                 heapq.heappush(stk,(dist+1,nx,ny,nd,dict(ps)))
 
+        # assert False, f"({start}, {goal})"
+        # exit() # Should always be a distance
         return inf
 
     def compute_goto_path(self):
