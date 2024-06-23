@@ -33,6 +33,9 @@ class DrawHexMap:
         self.game_map = game_map
         self.compute_scale_and_center()
         self.pre_draw()
+        self.update_init()
+
+    def update_init(self):
         self.m_init = np.array(self.m)
 
     def raw_hax_coord(self, x, y):

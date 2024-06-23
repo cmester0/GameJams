@@ -14,22 +14,27 @@ from run_game import *
 game_map, orig_players, start_line, mid_point, player_state_start, player_state_mid = chikane_map()
 
 players = list(orig_players[:7])
+out_of_map_counter = {}
 
 drawing = DrawHexMap(2000, 2000)
 drawing.set_map(game_map)
 
+for i,j,d in {(30,-17,4)}: # , (31, -19, 5)
+    xi, yi = drawing.hex_coord(i, j)
+    for xj in range(-3,3+1):
+        for yj in range(-3,3+1):
+            drawing.draw_hex_dir(xi+xj, yi+yj, d, (200,0,0))
+
+drawing.update_init()
+drawing.save_map( f'Maps/000_map.png', [], (0, []), out_of_map_counter) # players
+print ("saved")
+
+
+
 logic = GameLogic(game_map, start_line, mid_point, player_state_start, player_state_mid)
 
 fell_off_map = [False for p in players]
-out_of_map_counter = {}
 
-# for i,j,d in {(3, 0, 5), (15, 2, 5), (9, 2, 1)}:
-#     xi, yi = hex_coord(i, j, cx, cy, scale)
-#     for xj in range(-3,3+1):
-#         for yj in range(-3,3+1):
-#             draw_hex_dir(m, xi+xj, yi+yj, d, scale, (200,0,0))
-
-drawing.save_map( f'Maps/000_map.png', [], (0, []), out_of_map_counter) # players
 
 # Running logic!
 blocked = set()
