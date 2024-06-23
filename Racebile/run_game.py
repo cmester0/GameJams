@@ -18,7 +18,7 @@ class GameLogic:
         self.player_state_mid   = player_state_mid
 
         self.bfs_to_dict = {}
-        
+
         self.legal_positions, self.outside_map, self.next_outside_map, self.go_to_paths = None, None, None, None
         self.compute_goto_path()
 
@@ -97,7 +97,9 @@ class GameLogic:
                 player_steps.append((x,y,d))
 
         # TODO: Better!
-        # sips["start_last"] = int(min((((r,self.position_distance_goal[(x,y,d,tuple([player_state[(x,y)] for (x,y) in player_state]))] if (x,y,d,tuple([player_state[(x,y)] for (x,y) in player_state])) in self.position_distance_goal else inf),pl) for pl,((x,y),d,_,_,r) in enumerate(players)), key=lambda x: x[0])[1] == pl)
+        player_order = sorted((((r,-self.bfs_to_pos([(x,y,d)], self.start_line, ps)),pl) for pl,((x,y),d,_,ps,r) in enumerate(players)), key=lambda x: x[0])
+        last_players = list(map(lambda x: x[1], filter(lambda x: x[0] == player_order[0][0], player_order)))
+        sips["start_last"] = int(pl in last_players)
 
         if sips["off_map"] == 1:
             ng = 0
@@ -207,37 +209,34 @@ class GameLogic:
 
             ng = ng if not sips["off_map"] else 0
 
-            # # TODO: Handle this better!
-            # start_line_pos = [(x,y,d) for x,y in self.start_line for d in self.game_map[(x,y)][0]][0]
-            # sips["goal_cheer"] = int(
-            #     self.get_position_mid(x,y,d,o_player_state) <=
-            #     self.get_position_mid(*start_line_pos,self.player_state_start) <
-            #     self.get_position_mid(px,py,pd,player_state))
-            # midpoint_pos = [(x,y,d) for x,y in self.mid_point for d in self.game_map[(x,y)][0]][0]
-            # sips["halfway_cheer"] = int(
-            #     self.get_position_goal(x,y,d,o_player_state) <=
-            #     self.get_position_goal(*midpoint_pos,self.player_state_mid) <
-            #     self.get_position_goal(px,py,pd,player_state))
+            def passed_line(line, line_state):
+                a = [( x, y, d)]
+                b = line
+                c = [(px,py,pd)]
 
-            
-            nrounds = rounds + int(
-                self.bfs_to_pos(self.start_line,[(px,py,pd)],self.player_state_start) != 0 and
-                self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state) +
-                self.bfs_to_pos(self.start_line,[(px,py,pd)],self.player_state_start) <=
-                len([*racing_line[0][2]][1:])
-            )
+                a_state = o_player_state
+                b_state = line_state
+
+                a_to_b = self.bfs_to_pos(a, b, a_state)
+                b_to_c = self.bfs_to_pos(b, c, b_state)
+                a_to_c = len([*racing_line[0][2]][1:]) # = self.bfs_to_pos(a, c, a_state)
+
+                return (b_to_c != 0 and a_to_b + b_to_c <= a_to_c)
+
+            pass_goal = int(passed_line(self.start_line, self.player_state_start))
+
+            sips["goal_cheer"] = pass_goal if rounds > 0 else 0
+            sips["halfway_cheer"] = int(passed_line(self.mid_point, self.player_state_mid))
+
+            nrounds = rounds + pass_goal
             # print ("ROUND:", nrounds)
             ret_val = ((px, py), pd, ng, player_state, nrounds)
 
         players[pl] = ret_val
 
-        # sips["end_first"] = int(max(
-        #     (((r,
-        #        self.position_distance_goal[(x,y,d,tuple([player_state[(x,y)] for (x,y) in player_state]))]
-        #        if (x,y,d,tuple([player_state[(x,y)] for (x,y) in player_state])) in self.position_distance_goal else
-        #        inf),
-        #       pl) for pl,((x,y),d,_,_,r) in enumerate(players)),
-        #     key=lambda x: x[0])[1] == pl)
+        player_order = sorted((((r,-self.bfs_to_pos([(x,y,d)], self.start_line, ps)),pl) for pl,((x,y),d,_,ps,r) in enumerate(players)), key=lambda x: x[0])
+        last_players = list(map(lambda x: x[1], filter(lambda x: x[0] == player_order[-1][0], player_order)))
+        sips["end_first"] = int(pl in last_players)
 
         if ((not self.lookup_in_map(*ret_val[0]) is None and 3 in self.lookup_in_map(*ret_val[0])[1]) or
             any(opl != pl and (x,y) == ret_val[0] for opl,((x,y),d,_,_,r) in enumerate(players))):
@@ -249,6 +248,8 @@ class GameLogic:
         if total_sips == 0:
             sips["no_sips"] = 1
             total_sips = 1
+
+        print (sips)
 
         return player_steps, sips, steps, total_sips
 
