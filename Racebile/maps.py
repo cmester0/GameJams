@@ -70,18 +70,22 @@ def rtfm_map():
     }
     start_line = [( 0, 0), ( 0, -1)]
     mid_point = [(-1, 6), (-1, 7)]
+
+    player_state_start = {(-5,10): -1}
+    player_state_mid =   {(-5,10): -1}
+
     players = [
         # Start Setup
-        (( 0, 0), 5, 0, {(-5,10): 0},0),
-        ((-1, 0), 5, 0, {(-5,10): 0},0),
-        ((-1, 1), 5, 0, {(-5,10): 0},0),
-        ((-2, 1), 5, 0, {(-5,10): 0},0),
-        ((-2, 2), 5, 0, {(-5,10): 0},0),
-        ((-3, 2), 5, 0, {(-5,10): 0},0),
-        ((-3, 3), 5, 0, {(-5,10): 0},0),
-        ((-4, 3), 5, 0, {(-5,10): 0},0),
+        (( 0, 0), 5, 0, dict(player_state_start),0),
+        ((-1, 0), 5, 0, dict(player_state_start),0),
+        ((-1, 1), 5, 0, dict(player_state_start),0),
+        ((-2, 1), 5, 0, dict(player_state_start),0),
+        ((-2, 2), 5, 0, dict(player_state_start),0),
+        ((-3, 2), 5, 0, dict(player_state_start),0),
+        ((-3, 3), 5, 0, dict(player_state_start),0),
+        ((-4, 3), 5, 0, dict(player_state_start),0),
     ]
-    return game_map, players, start_line, mid_point
+    return game_map, players, start_line, mid_point, player_state_start, player_state_mid
 
 def loop_map():
     # 0 standard, 1 start fields, 2 blue, 3 star, 4 choice direction, 5 forced dirs
@@ -179,21 +183,25 @@ def loop_map():
     }
     start_line = [(0,3), (1,3)]
     mid_point = [(17, 0), (18,-1)]
+
+    player_state_start = {(10, 1): 0}
+    player_state_mid =   {(10, 1): 0}
+
     players = [
-        ( (0,3), 4, 0, {(10, 1): 0}, 0),
-        ( (1,3), 4, 0, {(10, 1): 0}, 0),
-        ( (0,4), 4, 0, {(10, 1): 0}, 0),
-        ( (1,4), 4, 0, {(10, 1): 0}, 0),
-        ( (0,5), 4, 0, {(10, 1): 0}, 0),
-        ( (1,5), 4, 0, {(10, 1): 0}, 0),
-        ( (0,6), 4, 0, {(10, 1): 0}, 0),
-        ( (1,6), 4, 0, {(10, 1): 0}, 0),
-        ( (0,7), 4, 0, {(10, 1): 0}, 0),
-        ( (1,7), 4, 0, {(10, 1): 0}, 0),
-        ( (0,8), 4, 0, {(10, 1): 0}, 0),
-        ( (1,8), 4, 0, {(10, 1): 0}, 0),
+        ( (0,3), 4, 0, dict(player_state_start), 0),
+        ( (1,3), 4, 0, dict(player_state_start), 0),
+        ( (0,4), 4, 0, dict(player_state_start), 0),
+        ( (1,4), 4, 0, dict(player_state_start), 0),
+        ( (0,5), 4, 0, dict(player_state_start), 0),
+        ( (1,5), 4, 0, dict(player_state_start), 0),
+        ( (0,6), 4, 0, dict(player_state_start), 0),
+        ( (1,6), 4, 0, dict(player_state_start), 0),
+        ( (0,7), 4, 0, dict(player_state_start), 0),
+        ( (1,7), 4, 0, dict(player_state_start), 0),
+        ( (0,8), 4, 0, dict(player_state_start), 0),
+        ( (1,8), 4, 0, dict(player_state_start), 0),
     ]
-    return game_map, players, start_line, mid_point
+    return game_map, players, start_line, mid_point, player_state_start, player_state_mid
 
 def clover_map():
     # 0 standard, 1 start fields, 2 blue, 3 star, 4 choice direction, 5 forced dirs

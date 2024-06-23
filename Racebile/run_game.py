@@ -176,7 +176,9 @@ class GameLogic:
                             while any(b in map(lambda x: (x[0],x[1]), pl) for b in blocked):
                                 pl = pl[:-1]
                                 return [(None,(nx,ny,nd),pl)]
+                            return [(None,(nx,ny,nd),pl)] # TODO: is this right?
                     assert (False)
+
                 racing_line = handle_10_to_12_blocked()
                 sips["bonk"] += lookahead - len(racing_line)
                 # TODO: print ("!!! HAPPEND HERE !!!")

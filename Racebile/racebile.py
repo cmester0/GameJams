@@ -6,20 +6,21 @@ from maps import *
 from draw_hex_map import *
 from run_game import *
 
-# game_map, players, start_line, mid_point = rtfm_map()
-# game_map, orig_players, start_line, mid_point = loop_map()
-# game_map, players, start_line, mid_point = clover_map()
-# game_map, players, start_line, mid_point = tight_clover_map()
-# game_map, players, start_line, mid_point = pod_racing_map()
-game_map, orig_players, start_line, mid_point, player_state_start, player_state_mid = chikane_map()
+# game_map, orig_players, start_line, mid_point, player_state_start, player_state_mid = chikane_map()
+game_map, orig_players, start_line, mid_point, player_state_start, player_state_mid = rtfm_map()
+# game_map, orig_players, start_line, mid_point, player_state_start, player_state_mid = loop_map()
 
-players = list(orig_players[:7])
+# game_map, orig_players, start_line, mid_point = clover_map()
+# game_map, orig_players, start_line, mid_point = tight_clover_map()
+# game_map, orig_players, start_line, mid_point = pod_racing_map()
+
+players = list(orig_players[:8])
 out_of_map_counter = {}
 
 drawing = DrawHexMap(2000, 2000)
 drawing.set_map(game_map)
 
-for i,j,d in {(30,-17,4)}: # , (31, -19, 5)
+for i,j,d in {(-5, 11, 4), (-5, 10, 4), (-5, 9, 4)}: # , (31, -19, 5)
     xi, yi = drawing.hex_coord(i, j)
     for xj in range(-3,3+1):
         for yj in range(-3,3+1):
@@ -49,7 +50,7 @@ total_rounds = 100_000
 while (iters < total_rounds):
     iters += 1
 
-    if verbose or iters % 5000 == 0:
+    if verbose:
         print(f'\nframe {iters:03d}.png')
         filename = f'Maps/{iters:03d}_{pl:02d}_b_map.png'
         drawing.save_map(filename, players, (0, []),out_of_map_counter)
@@ -71,7 +72,7 @@ while (iters < total_rounds):
         if verbose:
             print (sips)
 
-        if iters < 25 and len(average_rounds) == 0:
+        if iters < 0 and len(average_rounds) == 0:
             print (f"save {iters:03d}, player {pl:02d}", rounds)
             filename = f'Maps/{iters:03d}_{pl:02d}_a_map.png'
             drawing.save_map(filename, players, (pl, player_steps),out_of_map_counter)
@@ -79,12 +80,12 @@ while (iters < total_rounds):
             drawing.save_map(filename, players, (pl, []),out_of_map_counter)
 
         if all(rounds > 1 for _,_,_,_,rounds in players): # Any , All
-            if iters < 10:
-                print (len(average_rounds), iters)
-                print (players)
-                filename = f'Maps/bug.png'
-                drawing.save_map(filename, players, (pl, player_steps),out_of_map_counter)
-                exit()
+            # if iters < 10:
+            #     print (len(average_rounds), iters)
+            #     print (players)
+            #     filename = f'Maps/bug.png'
+            #     drawing.save_map(filename, players, (pl, player_steps),out_of_map_counter)
+            #     exit()
 
             players = list(orig_players[:len(players)])
             # logic = GameLogic(game_map, start_line, mid_point)
@@ -95,7 +96,8 @@ while (iters < total_rounds):
             # moves = [0 for p in players]
 
             average_rounds.append(iters)
-            print (len(average_rounds), iters, min(average_rounds), max(average_rounds), sum(average_rounds)/len(average_rounds))
+            if (len(average_rounds) % 100) == 0:
+                print (len(average_rounds), iters, min(average_rounds), max(average_rounds), sum(average_rounds)/len(average_rounds))
             iters = 0
             break
 
