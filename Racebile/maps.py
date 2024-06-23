@@ -950,7 +950,7 @@ def chikane_map():
         (42, -21) : ([3], [2]) ,
         (42, -20) : ([4], [2]) ,
     }
-    start_line = [(29, -17), (30, -17)]
+    start_line = [(29, -17), (29, -16)]
     mid_point = [(39, -19), (39, -18)]
 
     forced_dir = {(30, -7): 0, (35, -8): 0} # Start from -1... weird interaction (could be autogened, assuming order correct)
@@ -970,4 +970,7 @@ def chikane_map():
         ((24, -12), 5, 0, dict(forced_dir), 0),
     ]
 
-    return game_map, players, start_line, mid_point
+    player_state_start = {(30, -7): 0, (35, -8): 0} # dict(forced_dir)
+    player_state_mid = {(30, -7): 0, (35, -8): 0} # dict(forced_dir)
+
+    return game_map, players, start_line, mid_point, player_state_start, player_state_mid

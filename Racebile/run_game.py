@@ -9,19 +9,21 @@ from scipy.stats import binom
 # Helper functions
 
 class GameLogic:
-    def __init__(self, game_map, start_line, mid_point):
+    def __init__(self, game_map, start_line, mid_point, player_state_start, player_state_mid):
         self.game_map = game_map
-        self.start_line = start_line
-        self.mid_point  = mid_point
+        self.start_line = [(x,y,d) for x,y in start_line for d in self.game_map[(x,y)][0]]
+        self.mid_point  = [(x,y,d) for x,y in  mid_point for d in self.game_map[(x,y)][0]]
 
+        self.player_state_start = player_state_start
+        self.player_state_mid   = player_state_mid
+
+        self.bfs_to_dict = {}
+        
         self.legal_positions, self.outside_map, self.next_outside_map, self.go_to_paths = None, None, None, None
         self.compute_goto_path()
 
         self.comes_from = None
         self.compute_comes_from()
-
-        self.position_distance_goal     = self.bfs_distance(self.start_line)
-        self.position_distance_midpoint = self.bfs_distance(self.mid_point)
 
     def step_dir(self,x,y,d):
         if d == 0:
@@ -44,44 +46,21 @@ class GameLogic:
             return self.game_map[(x,y)]
 
     # TODO: compute directions when falling off map in step instead
-    def get_map_dirs(self, x, y, cd, player_state, update):
+    def get_map_dirs(self, x, y, player_state):
         cm = self.lookup_in_map(x,y)
         if cm is None:
             d = None
-        elif 5 in cm[1]:
-            if update:
-                player_state[(x,y)] = (1 + player_state[(x,y)]) % len(cm[0])
-            d = cm[0][player_state[(x,y)]]
         else:
-            if cd == -1:
-                pos1 = [(self.position_distance_goal[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in self.position_distance_goal]
-                pos2 = [(self.position_distance_midpoint[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in self.position_distance_midpoint]
+            if 5 in cm[1]:
+                d = cm[0][player_state[(x,y)]]
             else:
-                pos1 = [(self.position_distance_goal[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in self.position_distance_goal]
-                pos2 = [(self.position_distance_midpoint[(x,y,d)], 0 if d == cd else 1, d) for d in range(6) if (x,y,d) in self.position_distance_midpoint]
-            # d = min(pos, key=lambda x:x[:2])[2]
-            d = min(pos2)[2] if min(pos1)[2] < 12 else min(pos1)[2]
-
-            # print (min())
-            # _, d = min((position_distance[(*step_dir(x,y,nd),(nd+i)%6)], nd) for nd in cm[0] for i in [-1,0,1] if (*step_dir(x,y,nd),(nd+i)%6) in position_distance)
-            # _, d = min((len(game_map) + v if position_distance[(x,y,cd)] > v else v, nd)
-            #            for nd in cm[0]
-            #            )
-
-            # TODO: Get optimal racing line here!
-
-            # d = cm[0][0]
+                d = cm[0][0]
         return d, player_state
-
-    def get_position(self,x,y,d):
-        if (x,y,d) in self.position_distance_goal:
-            return self.position_distance_goal[(x,y,d)]
-        else:
-            ox, oy = self.step_dir(x,y,(d+3)%6)
-            return min((self.position_distance_goal[(ox,oy,d)],d) for d in range(6) if (ox,oy,d) in self.position_distance_goal)[1]
 
     def step_player(self,pl,players,fell_off_map,blocked):
         (x,y),d,g,player_state,rounds = players[pl]
+
+        o_player_state = dict(player_state)
 
         if not self.lookup_in_map(x,y) is None and 2 in self.lookup_in_map(x,y)[1]:
             ng = max(g-1,1)
@@ -114,10 +93,11 @@ class GameLogic:
             else:
                 player_steps.append((x,y,d))
                 x,y = self.step_dir(x,y,(d+3)%6)
-                d, player_state = self.get_map_dirs(x, y, -1, player_state, False)
+                d, player_state = self.get_map_dirs(x, y, player_state)
                 player_steps.append((x,y,d))
 
-        sips["start_last"] = int(min((((r,self.position_distance_goal[(x,y,d)] if (x,y,d) in self.position_distance_goal else inf),pl) for pl,((x,y),d,_,_,r) in enumerate(players)), key=lambda x: x[0])[1] == pl)
+        # TODO: Better!
+        # sips["start_last"] = int(min((((r,self.position_distance_goal[(x,y,d,tuple([player_state[(x,y)] for (x,y) in player_state]))] if (x,y,d,tuple([player_state[(x,y)] for (x,y) in player_state])) in self.position_distance_goal else inf),pl) for pl,((x,y),d,_,_,r) in enumerate(players)), key=lambda x: x[0])[1] == pl)
 
         if sips["off_map"] == 1:
             ng = 0
@@ -159,14 +139,18 @@ class GameLogic:
                         if any(b in map(lambda x: (x[0],x[1]), [*p]) for b in blocked):
                             continue
 
-                        if (nx,ny,nd) in self.position_distance_goal:
-                            l.append(((self.position_distance_goal[(nx,ny,nd)], self.position_distance_midpoint[(nx,ny,nd)]), (nx,ny,nd), p))
-                            if self.position_distance_goal[(nx,ny,nd)] < 12:
-                                use_goal = False
-                        else:
-                            l.append(((inf, inf), (nx,ny,nd), p)) # Todo: calculate actual distance when falling off!
+                        tps_tuple = (nx,ny,nd,tuple([temp_player_state[(x,y)] for (x,y) in temp_player_state]))
+                        l.append((
+                            max(
+                                self.bfs_to_pos([(nx,ny,nd)], self.start_line, temp_player_state), # start line dist
+                                self.bfs_to_pos([(nx,ny,nd)], self.mid_point , temp_player_state) # mid point dist
+                            ),
+                            (nx,ny,nd),
+                            p))
+                        # if tps_tuple in self.position_distance_goal and self.position_distance_goal[tps_tuple] < 12:
+                        #     use_goal = False
 
-                l = sorted(map(lambda x: (x[0][0] if use_goal else x[0][1],x[1],x[2]), l))
+                l = sorted(map(lambda x: (x[0],x[1],x[2]), l))
 
                 # Strategy!
                 racing_line = list(filter(lambda x: x[0] == min(l)[0], l))
@@ -217,21 +201,42 @@ class GameLogic:
 
             ng = ng if not sips["off_map"] else 0
 
-            # TODO: Handle this better!
-            start_line_pos = [(x,y,d) for x,y in self.start_line for d in self.game_map[(x,y)][0]][0]
-            sips["goal_cheer"] = int(self.get_position(x,y,d) <= self.get_position(*start_line_pos) < self.get_position(px,py,pd))
-            midpoint_pos = [(x,y,d) for x,y in self.mid_point for d in self.game_map[(x,y)][0]][0]
-            sips["halfway_cheer"] = int(self.get_position(x,y,d) <= self.get_position(*midpoint_pos) < self.get_position(px,py,pd))
+            # # TODO: Handle this better!
+            # start_line_pos = [(x,y,d) for x,y in self.start_line for d in self.game_map[(x,y)][0]][0]
+            # sips["goal_cheer"] = int(
+            #     self.get_position_mid(x,y,d,o_player_state) <=
+            #     self.get_position_mid(*start_line_pos,self.player_state_start) <
+            #     self.get_position_mid(px,py,pd,player_state))
+            # midpoint_pos = [(x,y,d) for x,y in self.mid_point for d in self.game_map[(x,y)][0]][0]
+            # sips["halfway_cheer"] = int(
+            #     self.get_position_goal(x,y,d,o_player_state) <=
+            #     self.get_position_goal(*midpoint_pos,self.player_state_mid) <
+            #     self.get_position_goal(px,py,pd,player_state))
 
-            nrounds = rounds + int(self.get_position(x,y,d) < self.get_position(px,py,pd))
+            # print ((( x, y), ( x, y) in self.game_map, ( x, y, d,tuple([o_player_state[(x,y)] for (x,y) in o_player_state])) in self.position_distance_goal),
+            #        ((px,py), (px,py) in self.game_map, (px,py,pd,tuple([  player_state[(x,y)] for (x,y) in   player_state])) in self.position_distance_goal))
+
+            print (
+            nrounds = rounds + int(   self.bfs_to_pos([( x, y, d)],self.start_line,o_player_state)
+                                   +  self.bfs_to_pos(self.start_line,(px,py,pd),self.player_state_start)
+                                   == len([*racing_line[0][2]][1:])
+                                      # self.bfs_to_pos([( x, y, d)],[(px,py,pd)],o_player_state)
+                                   )
             # print ("ROUND:", nrounds)
             ret_val = ((px, py), pd, ng, player_state, nrounds)
 
         players[pl] = ret_val
 
-        sips["end_first"] = int(max((((r,self.position_distance_goal[(x,y,d)] if (x,y,d) in self.position_distance_goal else inf),pl) for pl,((x,y),d,_,_,r) in enumerate(players)), key=lambda x: x[0])[1] == pl)
+        # sips["end_first"] = int(max(
+        #     (((r,
+        #        self.position_distance_goal[(x,y,d,tuple([player_state[(x,y)] for (x,y) in player_state]))]
+        #        if (x,y,d,tuple([player_state[(x,y)] for (x,y) in player_state])) in self.position_distance_goal else
+        #        inf),
+        #       pl) for pl,((x,y),d,_,_,r) in enumerate(players)),
+        #     key=lambda x: x[0])[1] == pl)
 
-        if (not self.lookup_in_map(*ret_val[0]) is None and 3 in self.lookup_in_map(*ret_val[0])[1]) or any(opl != pl and (x,y) == ret_val[0] for opl,((x,y),d,_,_,r) in enumerate(players)):
+        if ((not self.lookup_in_map(*ret_val[0]) is None and 3 in self.lookup_in_map(*ret_val[0])[1]) or
+            any(opl != pl and (x,y) == ret_val[0] for opl,((x,y),d,_,_,r) in enumerate(players))):
             if not (*ret_val[0],ret_val[1]) in self.outside_map:
                 blocked.add(ret_val[0])
 
@@ -243,31 +248,50 @@ class GameLogic:
 
         return player_steps, sips, steps, total_sips
 
-    # Distance to goal:
-    def bfs_distance(self, start):
+
+    def bfs_to_pos(self, start, goal, player_state):
+        # print ("from ", start, " to ", goal)
+        # print (f"len {len(self.bfs_to_dict)} vs {len([(x,y,d) for x,y in self.game_map for d in self.game_map[(x,y)][0]])}")
+
         position_distance = {}
-        stk = [(0,x,y,d) for x,y in start for d in self.game_map[(x,y)][0]]
-        # visited = set()
+        stk = [(0,x,y,d,dict(player_state)) for x,y,d in start]
+
+        if (tuple(start), tuple(goal)) in self.bfs_to_dict:
+            return self.bfs_to_dict[(tuple(start), tuple(goal))]
+
         while len(stk) > 0:
-            dist,x,y,d = heapq.heappop(stk)
+            dist,x,y,d,ps = heapq.heappop(stk)
 
-            if (x,y,d) in position_distance and dist >= position_distance[(x,y,d)]:
+            # Handle forced paths correctly!
+            if (x, y) in ps:
+                cm = self.lookup_in_map(x,y)
+                if cm[0][ps[(x,y)]] == d:
+                    ps[(x,y)] = (1 + ps[(x,y)]) % len(cm[0])
+                else:
+                    # print ("invalid!", (x,y,d), tuple([ps[(x,y)] for (x,y) in ps]))
+                    continue
+
+            ps_tuple = tuple([ps[(x,y)] for (x,y) in ps])
+
+            if (x,y,d,ps_tuple) in position_distance:
                 continue
 
-            if not (x,y,d) in self.comes_from[1]: # Unreachable??
+            if not (x,y) in self.game_map or not d in self.game_map[(x,y)][0]: # Unreachable??
                 continue
 
-            # TODO: handle forced directions!
-            if not (x,y,d) in position_distance or dist < position_distance[(x,y,d)]:
-                position_distance[(x,y,d)] = dist
+            if not (x,y,d,ps_tuple) in position_distance:
+                position_distance[(x,y,d,ps_tuple)] = dist
 
             assert (d in self.game_map[(x,y)][0])
-            # print ((x,y,d), comes_from[(x,y,d)], dist)
 
-            for nx,ny,nd in self.comes_from[1][(x,y,d)]:
-                heapq.heappush(stk,(dist+1,nx,ny,nd))
+            if (x,y,d) in goal: # TODO: include d?
+                self.bfs_to_dict[(tuple(start), tuple(goal))] = dist
+                return dist
 
-        return position_distance
+            for nx,ny,nd in self.go_to_paths[1][(x,y,d)]:
+                heapq.heappush(stk,(dist+1,nx,ny,nd,dict(ps)))
+
+        return inf
 
     def compute_goto_path(self):
         self.legal_positions = set()
