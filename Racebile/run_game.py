@@ -259,7 +259,7 @@ class GameLogic:
         position_distance = set()
         stk = [(0,x,y,d) for x,y,d in start]
 
-        if (tuple(start), tuple(goal)) in self.bfs_to_dict:
+        if ((tuple(start), tuple(goal), tuple([player_state[(x,y)] for (x,y) in player_state]))) in self.bfs_to_dict:
             return self.bfs_to_dict[(tuple(start), tuple(goal), tuple([player_state[(x,y)] for (x,y) in player_state]))]
 
         while len(stk) > 0:
