@@ -249,8 +249,6 @@ class GameLogic:
             sips["no_sips"] = 1
             total_sips = 1
 
-        print (sips)
-
         return player_steps, sips, steps, total_sips
 
 
