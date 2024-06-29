@@ -63,6 +63,8 @@ def manual_path_strategy(l):
     oi = 1
     i = 0
     while True:
+        time.sleep(0.1)
+
         # Did the user click the window close button?
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
@@ -76,8 +78,6 @@ def manual_path_strategy(l):
                     case 40: # Enter key
                         pygame.image.save(screen,f"Screenshots/screenshot_{screenshot_counter:03d}.png")
                         screenshot_counter += 1
-
-        # time.sleep(1)
 
         if oi != i:
             # Fill the background with white
@@ -160,6 +160,8 @@ while (iters < total_rounds):
         # Go to next player?
         next_player = False
         while not next_player:
+            time.sleep(0.1)
+
             # Did the user click the window close button?
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -249,7 +251,9 @@ while (iters < total_rounds):
             iters = 0
             break
 
-    if len(average_rounds) > 10000:
+    if len(average_rounds) > 1: # 10000:
+        pygame.image.save(screen,f"Screenshots/screenshot_{screenshot_counter:03d}.png")
+        screenshot_counter += 1
         break
 
 print (out_of_map_counter)
