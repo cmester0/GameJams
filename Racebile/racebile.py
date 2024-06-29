@@ -31,8 +31,50 @@ drawing.save_map( f'Maps/000_map.png', [], (0, []), out_of_map_counter) # player
 print ("saved")
 
 
+# Strategy
 
-logic = GameLogic(game_map, start_line, mid_point, player_state_start, player_state_mid)
+class Strategy:
+    def __init__(self, gear_strategy, path_strategy):
+        self.gear_strategy = gear_strategy
+        self.path_strategy = path_strategy
+
+def default_gear_strategy(g):
+    ng = g + 1 if g < 3 else g # TODO: Strategy
+    return ng
+
+def default_path_strategy(l):
+    print (l)
+    return list(filter(lambda x: x[0] == min(l)[0], l))
+
+default_strategy = Strategy(default_gear_strategy, default_path_strategy)
+
+def manual_gear_strategy(g):
+    return int(input(f"Current gear is {g}, what is your next gear: "))
+
+def manual_path_strategy(l):
+    images = []
+    for i, p in enumerate(l):
+        print (f"{i}: {p}")
+
+        drawing.draw_map(players, (pl, [*p[2]]), {})
+
+        img = Image.fromarray(drawing.m, "RGB")
+        img = img.rotate(90)
+        img.save(f"Maps/option_{i:03d}.png")
+
+    index = int(input ("which path?: "))
+    while index >= len(l):
+        index = int(input ("invalid index, try again: "))
+
+    return [l[index]]
+
+manual_strategy = Strategy(manual_gear_strategy, manual_path_strategy)
+
+# Strategies:
+# strat = default_strategy
+strat = manual_strategy
+
+logic = GameLogic(game_map, start_line, mid_point, player_state_start, player_state_mid, strat)
 
 fell_off_map = [False for p in players]
 
@@ -44,16 +86,16 @@ moves = [0 for p in players]
 
 average_rounds = []
 
-verbose = False
+verbose = True
 iters = 0
 total_rounds = 100_000
 while (iters < total_rounds):
     iters += 1
 
-    if verbose:
-        print(f'\nframe {iters:03d}.png')
-        filename = f'Maps/{iters:03d}_{pl:02d}_b_map.png'
-        drawing.save_map(filename, players, (0, []),out_of_map_counter)
+    # if verbose:
+    #     print(f'\nframe {iters:03d}.png')
+    #     filename = f'Maps/{iters:03d}_{pl:02d}_b_map.png'
+    #     drawing.save_map(filename, players, (0, []),out_of_map_counter)
     for pl,((x,y),d,g,player_state,rounds) in enumerate(players):
         player_steps, sips, steps, total_sips = logic.step_player(pl,players,fell_off_map,blocked)
 
@@ -71,6 +113,8 @@ while (iters < total_rounds):
 
         if verbose:
             print (sips)
+            print (total_sips)
+            print ()
 
         if iters < 0 and len(average_rounds) == 0:
             print (f"save {iters:03d}, player {pl:02d}", rounds)

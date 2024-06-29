@@ -9,7 +9,7 @@ from scipy.stats import binom
 # Helper functions
 
 class GameLogic:
-    def __init__(self, game_map, start_line, mid_point, player_state_start, player_state_mid):
+    def __init__(self, game_map, start_line, mid_point, player_state_start, player_state_mid, strategy):
         self.game_map = game_map
         self.start_line = [(x,y,d) for x,y in start_line for d in self.game_map[(x,y)][0]]
         self.mid_point  = [(x,y,d) for x,y in  mid_point for d in self.game_map[(x,y)][0]]
@@ -24,6 +24,8 @@ class GameLogic:
 
         self.comes_from = None
         self.compute_comes_from()
+
+        self.strategy = strategy
 
     def step_dir(self,x,y,d):
         if d == 0:
@@ -64,8 +66,15 @@ class GameLogic:
 
         if not self.lookup_in_map(x,y) is None and 2 in self.lookup_in_map(x,y)[1]:
             ng = max(g-1,1)
+        elif g == 0:
+            ng = 1
         else:
-            ng = g + 1 if g < 3 else g # TODO: Strategy
+            ng = self.strategy.gear_strategy(g)
+
+        if abs(ng - g) > 1:
+            ng = g + (ng - g) // abs(ng - g) # Just go in the direction of the gear if someone tries to cheat!
+        if ng > 3:
+            ng = 3
 
         sips = {
             "turn": 0,
@@ -161,8 +170,10 @@ class GameLogic:
                 l = sorted(map(lambda x: (x[0],x[1],x[2]), l))
 
                 # Strategy!
-                racing_line = list(filter(lambda x: x[0] == min(l)[0], l))
-                return racing_line
+                if len(l) <= 1:
+                    return l
+                else:
+                    return self.strategy.path_strategy(l)
 
             racing_line = get_racing_line(lookahead)
             if len(racing_line) == 0 and lookahead >= 10:

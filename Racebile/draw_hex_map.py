@@ -146,7 +146,7 @@ class DrawHexMap:
                 else:
                     self.draw_hex_dir(xi, yi, d, (255,255,255))
 
-    def draw_map(self, players, player_steps, fell_off_map):
+    def draw_map(self, players, player_steps, fell_off_map, fading_steps=False):
         # pre_draw(m,game_map, cx, cy, scale)
         self.m = np.array(self.m_init,dtype=np.uint8)
 
@@ -158,8 +158,8 @@ class DrawHexMap:
                 continue
 
             h = 5 * pl / 8 # len(players)
-            s = ((ps+1) / (len(player_steps)+1))
-            v = ((ps+1) / (len(player_steps)+1))
+            s = ((ps+1) / (len(player_steps)+1)) if fading_steps else 1
+            v = ((ps+1) / (len(player_steps)+1)) if fading_steps else 1
             r, g, b = colorsys.hsv_to_rgb(h,s,v)
 
             color = (int(r * 255), int(g * 255), int(b * 255))
