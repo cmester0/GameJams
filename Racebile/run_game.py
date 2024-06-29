@@ -9,7 +9,8 @@ from scipy.stats import binom
 # Helper functions
 
 class GameLogic:
-    def __init__(self, game_map, start_line, mid_point, player_state_start, player_state_mid, strategy):
+    def __init__(self, game_map, start_line, mid_point, player_state_start, player_state_mid, strategy, beer_size = 14):
+        self.beer_size = beer_size
         self.game_map = game_map
         self.start_line = [(x,y,d) for x,y in start_line for d in self.game_map[(x,y)][0]]
         self.mid_point  = [(x,y,d) for x,y in  mid_point for d in self.game_map[(x,y)][0]]
@@ -257,7 +258,7 @@ class GameLogic:
                 blocked.add(ret_val[0])
 
         fell_off_map[pl] = sips["off_map"]
-        total_sips = sips["turn"] + (sips["gas"]-2 if sips["gas"] > 2 else 0) + 5.5 * sips["off_map"] + sips["bonk"] + 11 * sips["gear_box"] + sips["start_last"] + sips["end_first"] + sips["halfway_cheer"] + sips["goal_cheer"] + sips["koblingsfejl"]
+        total_sips = sips["turn"] + (sips["gas"]-2 if sips["gas"] > 2 else 0) + (self.beer_size / 2) * sips["off_map"] + sips["bonk"] + 11 * sips["gear_box"] + sips["start_last"] + sips["end_first"] + sips["halfway_cheer"] + sips["goal_cheer"] + sips["koblingsfejl"]
         if total_sips == 0:
             sips["no_sips"] = 1
             total_sips = 1

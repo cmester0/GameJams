@@ -146,7 +146,7 @@ class DrawHexMap:
                 else:
                     self.draw_hex_dir(xi, yi, d, (255,255,255))
 
-    def draw_map(self, players, player_steps, fell_off_map, fading_steps=False):
+    def draw_map(self, players, player_steps, fell_off_map, fading_steps=True):
         # pre_draw(m,game_map, cx, cy, scale)
         self.m = np.array(self.m_init,dtype=np.uint8)
 
