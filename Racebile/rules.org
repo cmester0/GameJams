@@ -1,0 +1,35 @@
+* Standard spil
+Man spiller til alle har passeret mållinien.
+
+* Felter
+- Normal Felter: Ingen specialle regler.
+- Startsfelter: Man starter på en af disse felter, rækkefølgen er første spiller placeres forest osv. Facing er tvunget fremad, og må først ændres efter man har kørt.
+- Tvunget Nedgearing: Man skal gear ned, hvis muligt.
+- Blokeringsfelt: Man kan stoppe tidligt her og vende sig om. Man kan ikke komme på et blokeringsfelt, hvis der allerede er en spiller der vender om. Her bonker man dem, og vender dem rigtigt.
+- Valg af retninger: Første spiller vælger en retning som alle andre skal følge.
+- Tvunget retning: Du SKAL følge retningen angivet af pilene.
+- Midvejsfelter/Mållinie: Hvis man passere (ikke bare står på feltet) så er det en fællesskål.
+
+* Drik
+** Teknisk Fejl
+Ting man kan drikker 1 tår for:
+- for hvert "hvin"
+- for hvert "hån"
+- for hvert felt man ikke bevæger sig
+- for at starte sidst
+- for at slutte forest
+- all drikker for midvejs/mål-skål
+- for hver koblingsfejl
+- for ikke at drikke på en anden fejl
+Extra:
+- en halv øl for at falde af banen, og en half for at komme tilbage på banen
+- bunder en øl for at smadre gearkassen, dvs. at få 3 koblingsfejl på 1 tur
+
+** Generelle Fejl
+- At forklarer regler
+- At forklarer regler forkert
+- At glemme at annoncere en opgearing/nedgearing
+- At glemme en teknisk fejl, man skal stadig drikke for den tekniske fejl.
+
+* Optimal strategi
+Det er optimalt at kører i 3 gear, medmindre der er en blokade inden for kort afstand.
